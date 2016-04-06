@@ -1,0 +1,32 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite src_proxy
+{
+  graph
+    stream<IplImage> vid0 = SourceProxy() {
+      param
+        hostname : "localhost";
+        port : 9000;
+        listen : true; 
+        banner : true;
+     config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = X11Viewer(vid0) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+      config
+        placement : partitionColocation("P1");
+    }
+}

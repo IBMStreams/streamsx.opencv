@@ -1,0 +1,214 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+#undef LOG_INFO // conflict with syslog
+#include <opencv.h>
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+my $inTupleName = $model->getInputPortAt(0)->getCppTupleName(); 
+
+##   Codec ----->  CV_FOURCC
+##
+##   mpeg1         PIM1
+##   motion-jpeg   MJPG
+##   mpeg4.2       MP42
+##   mpeg4.3       DIV3
+##   mpeg4         DIVX
+##   h263          I263
+##   flv1          FLV1
+
+###my $filename = get_param($model, "filename", undef) ;
+my $filename = $model->getParameterByName("filename")->getValueAt(0)->getCppExpression();
+
+my $fourcc = get_param($model, "fourcc", undef) ;
+
+my $rate = get_param($model, "rate", undef) ;
+
+###my $frate = get_param($model, "frate", undef) ;
+my $frate = $model->getParameterByName("frate") ? $model->getParameterByName("frate")->getValueAt(0)->getCppExpression() : undef;
+
+SPL::CodeGen::error("Missing 'rate' or 'frate'  parameter") unless $rate || $frate ;
+SPL::CodeGen::error("Rate value defined twice as 'rate' and 'frate'") if $rate && $frate ;
+
+%>
+
+using namespace std;
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR() :
+  _writer(NULL),
+  _recording_done(false),
+  _rate(0)
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  <% if ($rate)
+  { %>
+
+    _rate = <%= $rate %> ;
+
+    <% }
+  else
+  { %>
+
+    string filename(<%=$frate%>) ;
+
+    SPLLOG(L_INFO, "Opening video file " << QT(filename) << " to obtain frame rate", DBG_ASP);
+
+    CvCapture* capture = NULL ;
+
+    try
+    {
+      capture = cvCreateFileCapture(filename.c_str( )) ;
+    }
+    catch(cv::Exception& ex)
+    {
+      THROW(SPLRuntimeOperator, "cvCreateFileCapture failed: " << ex) ;
+    }
+
+    if (capture == NULL)
+    {
+      THROW(SPLRuntimeOperator, "Unable to open video file " << QT(filename)) ;
+    }
+
+    double fps = cvGetCaptureProperty(capture, CV_CAP_PROP_FPS) ;
+
+    cvReleaseCapture(&capture) ;
+
+    SPLLOG(L_INFO, "FPS obtained from file " << QT(filename) << ": " << fps, DBG_ASP) ;
+
+    if (fps >= 1)
+    {
+      _rate = (int)fps ;
+    }
+    else
+    {
+      THROW(SPLRuntimeOperator, "Invalid FPS (" << fps << ") from file " << QT(filename)) ;
+    }
+
+    <% }
+  %> ;
+
+  string fourcc(<%= qt($fourcc) %>) ;
+
+  if (fourcc.size( ) != 4)
+  {
+    THROW(SPLRuntimeOperator, "Parameter FOURCC must be exactly 4 characters") ;
+  }
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & tuple, uint32_t port)
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  if (_recording_done)
+  {
+    SPLLOG(L_DEBUG, "Recording complete, skipping frame", DBG_ASP) ;
+  }
+  else
+  {
+    IplImage* cvimg = NULL ;
+    const IPort0Type & <%= $inTupleName %> = static_cast<const IPort0Type &>(tuple);
+    <%= copy2img(undef, "$inTupleName", "cvimg") %> ;
+
+    if (!cvimg)
+    {
+      THROW(SPLRuntimeOperator, "Unable to create image") ;
+    }
+    else
+    {
+      if (!_writer)
+      {
+        string fourcc(<%= qt($fourcc) %>) ;
+        string filename(<%=$filename%>) ;
+
+        _writer = cvCreateVideoWriter(filename.c_str( ),
+                                      CV_FOURCC(toupper(fourcc[0]),
+                                                toupper(fourcc[1]),
+                                                toupper(fourcc[2]),
+                                                toupper(fourcc[3])),
+                                      _rate, cvSize(cvimg->width, cvimg->height)) ;
+
+        if (!_writer)
+        {
+          THROW(SPLRuntimeOperator, "Unable to create video writer") ;
+        }
+
+        SPLLOG(L_INFO, "Writing video to " << QT(filename) << ". Rate=" << _rate << " codex=" << fourcc, DBG_ASP) ;
+      }
+
+      cvWriteFrame(_writer, cvimg) ;
+
+      cvReleaseImage(&cvimg) ;
+    }
+  }
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  if (_writer)
+  {
+    SPLLOG(L_INFO, "Punctuation received. Stopping the recording", DBG_ASP) ;
+
+    cvReleaseVideoWriter(&_writer) ;
+    _recording_done = true ;
+  }
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

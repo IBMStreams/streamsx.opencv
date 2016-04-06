@@ -1,0 +1,44 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite log
+{
+  graph
+    stream<IplImage> vid0 = CaptureFromCAM() {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> vid1 = DoLog(vid0) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> vid2 = DoLog(vid0) {
+      param
+        invert : 1;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> src_n_log = Collage(vid0; vid1; vid2) {
+      config
+        placement : partitionColocation("P2");
+    }
+
+    () as SinkOp1 = X11Viewer(src_n_log) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+      config
+        placement : partitionColocation("P1");
+    }
+}

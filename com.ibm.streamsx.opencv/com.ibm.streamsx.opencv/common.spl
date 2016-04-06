@@ -1,0 +1,16 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace com.ibm.streamsx.opencv;
+
+type IplImage = int32 ipl_channels, int32 ipl_depth, int32 ipl_width, int32 ipl_height, list<uint8> ipl_data, uint64 tag;
+
+type BoxList = list<int32> x_list, list<int32> y_list, list<int32> width_list, list<int32> height_list;
+
+type CroppedIplImage = int32 ipl_channels, int32 ipl_depth, int32 ipl_width, int32 ipl_height, int32 ipl_x, int32 ipl_y, list<uint8> ipl_data, uint64 tag;
+

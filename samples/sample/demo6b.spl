@@ -1,0 +1,46 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite demo6b
+{
+  graph
+    stream<IplImage> vid0 = CaptureFromFile() {
+      param
+        file : dataDirectory() + "/sample_motion6.mpg";
+        repeat : 1;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> md0 = MotionDetection(vid0) {
+      param
+        pyramidlevel : 5;
+        termiteration : 20;
+        featurecount : 400;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> st0 = Stats(md0) {
+      param
+        color : 0;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = MJPEGStreamer(st0) {
+      param
+        httpport : 9001;
+      config
+        placement : partitionColocation("P1");
+    }
+}

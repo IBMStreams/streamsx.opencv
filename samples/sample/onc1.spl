@@ -1,0 +1,54 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite onc1 {
+  graph
+    stream<IplImage> vid0 = CaptureFromFile() {
+      param
+        file : dataDirectory() + "/sample.mpg";
+        repeat : 1;
+        rate : 10000;
+      config
+        placement : partitionColocation("P1");
+    }
+
+// example of hiding a video feature (e.g. timestamp or logo) across bottom of video
+    stream<IplImage> vid1 = MakeBox(vid0) {
+      param
+        topleft : 0, 160;
+        bottomright : 320, 200;
+        color : 0,0,0;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> vid2 = SkipEmpty(vid1) {
+      param
+        threshold : 20.0;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> vid3 = FramePacer(vid2) {
+      param
+        file : dataDirectory() + "/sample.mpg";
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = MJPEGStreamer(vid3) {
+      param
+        httpport : 9001;
+      config
+        placement : partitionColocation("P1");
+    }
+}

@@ -1,0 +1,64 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite demo4 {
+  graph
+    stream<IplImage> vid0 = SourceProxy() {
+      param
+        hostname : "localhost";
+        port : 9000;
+        listen : true;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> smth = Smooth(vid0) {
+      param
+        iteration : 4;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> cb = CodeBook(smth) {
+      param
+        time : 1;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> cb_cc = ConnectedComponents(cb) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> cb_cc_color = CvtColor(cb_cc) {
+      param
+        channels : 3;
+        cvt_param : "CV_GRAY2BGR"; /* Constants for color conversion (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> final = Apply2(vid0; cb_cc_color) {
+      param
+        transform : "cvAnd"; /* The CV "in place" function to apply, suitable functions are "cvOr", "cvAnd", "cvAbsDiff", etc. */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = X11Viewer(final) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+      config
+        placement : partitionColocation("P1");
+    }
+}

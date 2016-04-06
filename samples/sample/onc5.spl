@@ -1,0 +1,91 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite onc5
+{
+  graph
+    stream<IplImage> vid0 = CaptureFromCAM() {
+      config
+        placement : partitionColocation("P1");
+    }
+    
+    stream<IplImage> vid1 = CvtColor(vid0) {
+      param
+        cvt_param : "CV_BGR2GRAY"; /* Constants for color conversion (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<int32 trackbar_threshold1> tb_th1 = TrackBar() {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+        name : "threshold1";
+        title : "Canny";
+        value : 100;
+        max : 255;
+      config
+        placement : partitionColocation("Px");
+    }
+
+    stream<int32 trackbar_threshold2> tb_th2 = TrackBar() {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+        name : "threshold2";
+        title : "Canny";
+        value : 100;
+        max : 1000;
+      config
+        placement : partitionColocation("Px");
+    }
+
+    stream<IplImage> canny = Canny(vid1; tb_th1; tb_th2) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> canny_skip = SkipFrame(canny) {
+      param
+        style : "adaptive";
+      config
+        placement : partitionColocation("Px");
+    }
+
+    () as SinkOp1 = X11Viewer(canny_skip) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+        title : "Canny";
+      config
+        placement : partitionColocation("Px");
+    }
+
+    stream<IplImage> canny_rgb = CvtColor(canny) {
+      param
+        channels : 3;
+        cvt_param : "CV_GRAY2BGR"; /* Constants for color conversion (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P2");
+    }
+
+    stream<IplImage> src_n_canny = Collage(vid0; canny_rgb) {
+      config
+        placement : partitionColocation("P2");
+    }
+
+    () as SinkOp2 = SaveToFile(src_n_canny) {
+      param
+        filename : dataDirectory() + "/canny-out.avi";
+        frate : dataDirectory() + "/sample.mpg";
+        fourcc : "mjpg";
+      config
+        placement : partitionColocation("P2");
+    }
+}

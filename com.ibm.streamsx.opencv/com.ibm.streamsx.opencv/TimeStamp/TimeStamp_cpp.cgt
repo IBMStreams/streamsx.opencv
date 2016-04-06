@@ -1,0 +1,165 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+my $inTupleName = $model->getInputPortAt(0)->getCppTupleName(); 
+
+my $relative = get_param($model, "relative", 0) ;
+
+%>
+
+#include <sys/time.h>
+
+#undef LOG_INFO // conflict with syslog
+#include <opencv.h>
+
+using namespace std;
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR()
+  : MY_BASE_OPERATOR(),
+  _relative_ts(0),
+  _start_ts(0)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  _relative_ts = <%= $relative %> ;
+
+  try
+  {
+    cvInitFont(&_font, CV_FONT_HERSHEY_SIMPLEX, 1.0, 1.0, 0.0, 2, CV_AA) ;
+  }
+  catch(cv::Exception& exc)
+  {
+    THROW(SPLRuntimeOperator, "Unable to create font: " << exc) ;
+  }
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+static double getTS( )
+{
+  struct timeval tv ;
+  gettimeofday(&tv, NULL) ;
+  
+  return (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0 ;
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  if (_relative_ts)
+  {
+    _start_ts = getTS( ) ;
+  }
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & tuple, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  IplImage* img_in = NULL ;
+  
+  const IPort0Type & <%= $inTupleName %> = static_cast<const IPort0Type &>(tuple);
+  <%= copy2img(undef, "$inTupleName", "img_in") %> ;
+
+  if (!img_in)
+  {
+    THROW(SPLRuntimeOperator, "Unable to create image") ;
+  }
+  else
+  {
+    char buffer[128] ;
+    struct tm loc_tm ;
+    struct tm* loc_tm_ptr = &loc_tm ;
+    uint32_t usec = 0 ;
+    if (_relative_ts)
+    {
+      double t = getTS( ) - _start_ts ;
+      usec = (uint32_t)((t * 1000000) - ((uint64_t)t * 1000000)) ;
+      loc_tm.tm_hour = (uint64_t)t / 3600 ;
+      loc_tm.tm_min = ((uint64_t)t / 60) % 60 ;
+      loc_tm.tm_sec = (uint64_t)t % 60 ;
+    }
+    else
+    {
+      struct timeval tv ;
+      gettimeofday(&tv, NULL) ;
+      usec = tv.tv_usec ;
+      loc_tm_ptr = localtime_r(&tv.tv_sec, &loc_tm) ;
+    }
+
+    snprintf(buffer, 128, "%2.2d:%2.2d:%2.2d.%3.3d",
+             loc_tm_ptr->tm_hour,
+             loc_tm_ptr->tm_min,
+             loc_tm_ptr->tm_sec,
+             usec / 1000) ;
+             
+    cvPutText(img_in, buffer, cvPoint(20,img_in->height - 20), &_font, cvScalarAll(255)) ;
+
+    OPort0Type otuple ;
+    <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+    <%= copy2tuple(undef, "img_in", "otuple") %> ;
+    cvReleaseImage(&img_in) ;
+    
+    submit(otuple, 0);
+  }
+  
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  submit(punct, 0) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

@@ -1,0 +1,46 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite snow
+ {
+  graph
+    stream<IplImage> snow0 = Snow() {
+      param
+        width : 128;
+        height : 96;
+        fps : 10;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> snow1 = Resize(snow0) {
+      param
+        width : 640;
+        height : 480;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> snow2 = Smooth(snow1) {
+      param
+        iteration : 4;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = X11Viewer(snow2) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+      config
+        placement : partitionColocation("P1");
+    }
+}

@@ -1,0 +1,255 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+
+my $inputPort = $model->getInputPortAt(0);
+my $outputPort = $model->getOutputPortAt(0);
+
+my $text = $model->getParameterByName("text")->getValueAt(0)->getCppExpression();
+my $size = $model->getParameterByName("size") ? $model->getParameterByName("size")->getValueAt(0)->getCppExpression() : 1.0;
+my $thickness = $model->getParameterByName("thickness") ? $model->getParameterByName("thickness")->getValueAt(0)->getCppExpression() : 1;
+my $x = $model->getParameterByName("x") ? $model->getParameterByName("x")->getValueAt(0)->getCppExpression() : 20;
+my $y = $model->getParameterByName("y") ? $model->getParameterByName("y")->getValueAt(0)->getCppExpression() : 20;
+my $forecolor = $model->getParameterByName("forecolor") ? $model->getParameterByName("forecolor")->getValueAt(0)->getCppExpression() : undef;
+my $backcolor = $model->getParameterByName("backcolor") ? $model->getParameterByName("backcolor")->getValueAt(0)->getCppExpression() : undef;
+#print STDERR "text=$text\n";
+
+my $widthAttribute = "";
+$widthAttribute = "iport\$0.get_ipl_width()" if $model->getInputPortAt(0)->getAttributeByName("ipl_width");
+$widthAttribute = $model->getParameterByName("widthAttribute")->getValueAt(0)->getCppExpression() if $model->getParameterByName("widthAttribute");
+SPL::CodeGen::error("image width not specified by parameter or input attribute") unless $widthAttribute;
+#print STDERR "widthAttribute=$widthAttribute\n";
+
+my $heightAttribute = "";
+$heightAttribute = "iport\$0.get_ipl_height()" if $model->getInputPortAt(0)->getAttributeByName("ipl_height");
+$heightAttribute = $model->getParameterByName("heightAttribute")->getValueAt(0)->getCppExpression() if $model->getParameterByName("heightAttribute");
+SPL::CodeGen::error("image height not specified by parameter or input attribute") unless $heightAttribute;
+#print STDERR "heightAttribute=$heightAttribute\n";
+
+my $depthAttribute = "8";
+$depthAttribute = "iport\$0.get_ipl_depth()" if $model->getInputPortAt(0)->getAttributeByName("ipl_depth");
+$depthAttribute = $model->getParameterByName("depthAttribute")->getValueAt(0)->getCppExpression() if $model->getParameterByName("depthAttribute");
+#print STDERR "depthAttribute=$depthAttribute\n";
+
+my $channelsAttribute = "3";
+$channelsAttribute = "iport\$0.get_ipl_channels()" if $model->getInputPortAt(0)->getAttributeByName("ipl_channels");
+$channelsAttribute = $model->getParameterByName("channelsAttribute")->getValueAt(0)->getCppExpression() if $model->getParameterByName("channelsAttribute");
+#print STDERR "channelsAttribute=$channelsAttribute\n";
+
+my $dataAttribute = "";
+$dataAttribute = "iport\$0.get_ipl_data()" if $model->getInputPortAt(0)->getAttributeByName("ipl_data");
+$dataAttribute = $model->getParameterByName("dataAttribute")->getValueAt(0)->getCppExpression() if $model->getParameterByName("dataAttribute");
+SPL::CodeGen::error("image data not specified by parameter or input attribute") unless $dataAttribute;
+#print STDERR "dataAttribute=$dataAttribute\n";
+
+my $dataAttributeName = "ipl_data";
+my $dataAttributeType = "";
+my $x4;
+($x4,$dataAttributeName) = $model->getParameterByName("dataAttribute")->getValueAt(0)->getSPLExpression() =~ m/(.*\.)?(.*)/ if $model->getParameterByName("dataAttribute");
+$dataAttributeType = $model->getInputPortAt(0)->getAttributeByName("ipl_data")->getSPLType() if $model->getInputPortAt(0)->getAttributeByName("ipl_data");
+$dataAttributeType = $model->getParameterByName("dataAttribute")->getValueAt(0)->getSPLType() if $model->getParameterByName("dataAttribute");
+SPL::CodeGen::error("image data type not 'list<uint8>") unless $dataAttributeType eq "list<uint8>";
+#print STDERR "dataAttributeName=$dataAttributeName\n";
+#print STDERR "dataAttributeType=$dataAttributeType\n";
+
+%>
+
+#include <hpa_time.h>
+#undef LOG_INFO // conflict with syslog
+#include <opencv.h>
+
+using namespace std;
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR()
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  double size = <%= $size %> ;
+  int thickness = <%= $thickness %> ;
+
+  try {
+    // allocate a font in the specified size
+    cvInitFont(&_font, CV_FONT_HERSHEY_SIMPLEX, size, size, 0.0, thickness, CV_AA) ;
+  } catch(cv::Exception& exc) {
+    THROW(SPLRuntimeOperator, "Unable to create font: " << exc) ;
+  }
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & inTuple, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  // get the values of the parameters
+  const IPort0Type& iport$0 = static_cast<const IPort0Type &>(inTuple);
+  const int width = <%=$widthAttribute%>;
+  const int height = <%=$heightAttribute%>;
+  const int depth = <%=$depthAttribute%>;
+  const int channels = <%=$channelsAttribute%>;
+  const SPL::list<SPL::uint8> data = <%=$dataAttribute%>;
+
+  // basic safety checks
+  if (depth!=IPL_DEPTH_8U) { THROW(SPLRuntimeOperator, "Unsupported image depth: " << IPL_DEPTH2STR(depth)); }
+  const int imgSize = width * height * channels;
+  const int dataLength = <%=$dataAttribute%>.getSize();
+  if (imgSize!=dataLength) { THROW(SPLRuntimeOperator, "image data size does not equal width*height*channels, " << imgSize << " != " << dataLength); }
+
+  // create an OpenCV image buffer 
+  IplImage* img = cvCreateImage(cvSize(width, height), depth, channels);
+  if (!img) { THROW(SPLRuntimeOperator, "Unable to create image"); }
+
+  // copy the data from the tuple into the OpenCV image buffer
+  uint8_t* srcPointer = (uint8_t*)(&data[0]);
+  uint8_t* dstPointer = (uint8_t*)(img->imageData);
+  for(int y=0; y<img->height; y++) {
+      memcpy(dstPointer, srcPointer, img->width * img->nChannels);
+      srcPointer += img->width * img->nChannels;
+      dstPointer += img->widthStep; }
+
+  <% if ($forecolor) { %>
+  if (<%=$forecolor%>.getSize()!=3) { THROW(SPLRuntimeOperator, "forecolor list does not have exactly three elements: [red,green,blue]"); }
+  int fRed = <%=$forecolor%>.getElement(0);
+  int fGreen = <%=$forecolor%>.getElement(1);
+  int fBlue = <%=$forecolor%>.getElement(2);	
+  if (fRed<0) fRed = 0; if (fRed>255) fRed = 255;
+  if (fGreen<0) fGreen = 0; if (fGreen>255) fGreen = 255;
+  if (fBlue<0) fBlue = 0; if (fBlue>255) fBlue = 255;
+  CvScalar forecolor = CV_RGB( fRed, fGreen, fBlue ) ;
+  <% } else { %>
+  CvScalar forecolor = CV_RGB( 255,255,255 ) ;
+  <% } %>
+
+  <% if ($backcolor) { %>
+  if (<%=$backcolor%>.getSize()!=3) { THROW(SPLRuntimeOperator, "backcolor list does not have exactly three elements: [red,green,blue]"); }
+  int bRed = <%=$backcolor%>.getElement(0);
+  int bGreen = <%=$backcolor%>.getElement(1);
+  int bBlue = <%=$backcolor%>.getElement(2);	
+  if (bRed<0) bRed = 0; if (bRed>255) bRed = 255;
+  if (bGreen<0) bGreen = 0; if (bGreen>255) bGreen = 255;
+  if (bBlue<0) bBlue = 0; if (bBlue>255) bBlue = 255;
+  CvScalar backcolor = CV_RGB( bRed, bGreen, bBlue ) ;
+  <% } %>
+
+  // allocate the coordinates for rendering the text
+  CvPoint pt;
+  pt.x = <%= $x %> ;
+  pt.y = <%= $y %> ;
+
+  // allocate the text and overlay it on the copy of the image,
+  // one line at a time
+  string buffer = <%=$text%>; 
+
+  while (buffer.length()) { // overlay each line of text on the image separately ...
+
+    // parse out the next line of text
+    std::size_t newline = buffer.find('\n');
+    string thisline(newline!=std::string::npos ? buffer.substr(0, newline) : buffer);
+    buffer = newline!=std::string::npos ? buffer.substr(newline+1) : "";
+
+    // get the dimensions of the bounding box for the line when rendered in the font
+    CvSize size ;
+    int baseline = 0 ;
+    cvGetTextSize(thisline.c_str(), &_font, &size, &baseline) ;
+
+    // if either of the coordinates are negative, justify the line against the opposite edge of the image
+    if (pt.x < 0) { pt.x = (img->width + pt.x) - size.width ; }
+    if (pt.y < 0) { pt.y = img->height + pt.y ; } else { pt.y += size.height ; }
+  
+    <% if ($backcolor) { %>
+      // allocate the corners of the bounding box and draw it over the image
+      CvPoint pt1 ( MAX(pt.x - 4, 0) , MAX(pt.y - 4 - size.height, 0) );
+      CvPoint pt2 ( MIN(pt.x + size.width + 4, img->width - 1) , MIN(pt.y + 4, img->height - 1) );
+      cvRectangle(img, pt1, pt2, backcolor, CV_FILLED) ;    
+    <% } %> 
+  
+    // render the line in the font over the image at the coordinates
+    SPLLOG(L_TRACE, "adding text '" << thisline << "' in color [" << fRed << "," <<  fGreen << "," << fBlue << "] at coordinates [" << pt.x << "," << pt.y << "], " << buffer.size() << " characters remaining", DBG_ASP);
+    cvPutText(img, thisline.c_str(), pt, &_font, forecolor) ;
+
+    // advance the 'y' coordinate by the height of the bounding box, in case there is another line
+    pt.y += size.height;
+  } 
+
+  // initialize the output tuple with copies of the input attributes
+  OPort0Type outTuple;
+  outTuple.assignFrom(inTuple, false);
+
+  // copy the image into the output tuple
+  outTuple.get_<%=$dataAttributeName%>().resize(img->width*img->height*img->nChannels);
+  srcPointer = (uint8_t*)(img->imageData);    
+  dstPointer = (uint8_t*)(&outTuple.get_<%=$dataAttributeName%>()[0]);
+  for(int y=0; y<img->height; y++) {
+      memcpy(dstPointer, srcPointer, img->width * img->nChannels);
+      srcPointer += img->widthStep; 
+      dstPointer += img->width * img->nChannels; }
+
+  // send the output tuple containing the image downstream
+  submit(outTuple, 0);
+  
+  cvReleaseImage(&img) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  submit(punct, 0) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

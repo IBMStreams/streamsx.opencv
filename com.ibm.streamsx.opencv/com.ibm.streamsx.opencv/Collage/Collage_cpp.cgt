@@ -1,0 +1,278 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+my $inTupleName = $model->getInputPortAt(0)->getCppTupleName(); 
+
+SPL::CodeGen::error("Must have at least one input port") unless $model->getNumberOfInputPorts() > 0 ;
+my $num_ports = $model->getNumberOfInputPorts() ;
+
+%>
+#include <list>
+
+#undef LOG_INFO // conflict with syslog
+#include <opencv.h>
+
+using namespace std;
+using namespace dpssupport::opencv;
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR()
+  : MY_BASE_OPERATOR(),
+  _max_list_size(1024)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  for(int i=0 ; i< <%= $num_ports %>; i++)
+  {
+    _punct_received[i] = false ;
+  }
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  AutoMutex lck(_mutex) ;
+
+  for(int i=0 ; i< <%= $num_ports %>; i++)
+  {
+    std::list<IplImage*>::iterator it(_image_list[i].begin( )) ;
+
+    while (it != _image_list[i].end( ))
+    {
+      IplImage* img = *it ;
+
+      cvReleaseImage(&img) ;
+      it++ ;
+    }
+  }
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  createThreads(1); // Create source thread
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  _new_image.broadcast( ) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+// Processing for source and threaded operators   
+void MY_OPERATOR::process(uint32_t idx)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername) %> "::process Thread", DBG_ASP) ;
+
+  AutoMutex lck(_mutex) ;
+
+  while (!getPE().getShutdownRequested( ))
+  {
+    bool ready = true ;
+
+    for(int i=0 ; i< <%= $num_ports %>; i++)
+    {
+      if (!_punct_received[i])
+      {
+        ready = false ;
+      }
+    }
+
+    if (ready)
+    {
+      SPLLOG(L_DEBUG, "Punctuation received from all port. Propagating it", DBG_ASP) ;
+      submit(Punctuation::WindowMarker, 0);
+
+      for(int i=0 ; i< <%= $num_ports %>; i++)
+      {
+        _punct_received[i] = false ;
+      }
+    }
+
+    ready = true ;
+    
+    for(int i=0 ; i< <%= $num_ports %>; i++)
+    {
+      if (_image_list[i].size( ) == 0)
+      {
+        SPLLOG(L_DEBUG, "Image #" << i << " is still missing", DBG_ASP) ;
+        ready = false ;
+      }
+    }
+
+    if (!ready)
+    {
+      SPLLOG(L_DEBUG, "Waiting for new images to be received", DBG_ASP) ;
+      _new_image.wait(_mutex) ;
+    }
+    else
+    {
+      SPLLOG(L_DEBUG, "We have all the images. Processing now...", DBG_ASP);
+
+      IplImage* images[<%= $num_ports %>] ;
+
+      for(int i=0 ; i< <%= $num_ports %>; i++)
+      {
+        images[i] = _image_list[i].front( ) ;
+        _image_list[i].pop_front( ) ;
+      }
+      
+      bool compatible_images = true ;
+
+      int total_width = images[0]->width ;
+
+      for(int i=1 ; i< <%= $num_ports %>; i++)
+      {
+        if (images[0]->height != images[i]->height ||
+            images[0]->nChannels != images[i]->nChannels ||
+            images[0]->depth != images[i]->depth)
+        {
+          SPLLOG(L_ERROR, "Unable to create collage with images of different types "
+                 << "(0: " << IINFO(images[0])
+                 << " " << i << ": " << IINFO(images[i]) << ")", DBG_ASP) ;
+          
+          compatible_images = false ;
+        }
+
+        total_width += images[i]->width ;
+      }
+
+      if (compatible_images)
+      {
+        IplImage* img = cvCreateImage(cvSize(total_width,
+                                             images[0]->height),
+                                      images[0]->depth,
+                                      images[0]->nChannels) ;
+        
+        SPLLOG(L_DEBUG, "Final image is: " << IINFO(img), DBG_ASP) ;
+
+        int x_offset = 0 ;
+        
+        for(int i=0 ; i< <%= $num_ports %>; i++)
+        {
+          SPLLOG(L_DEBUG, "Copying image " << i << " to the final collage, with offset " << x_offset, DBG_ASP) ;
+          
+          const uint8_t* src_ptr = (const uint8_t*)(images[i]->imageData) ;
+          uint8_t* dst_ptr = (uint8_t*)(img->imageData) ;
+
+          dst_ptr += x_offset * images[i]->nChannels ;
+          
+          for(int y=0; y<images[i]->height; y++)
+          {
+            memcpy(dst_ptr, src_ptr, images[i]->width * images[i]->nChannels) ;
+
+            src_ptr += images[i]->widthStep ;
+            dst_ptr += img->widthStep ;
+          }
+
+          x_offset += images[i]->width ;
+        }
+        
+        OPort0Type otuple ;
+        <%= copy2tuple(undef, "img", "otuple") %> ;
+
+        cvReleaseImage(&img) ;
+
+        submit(otuple, 0) ;
+      }
+      
+      for(int i=0 ; i< <%= $num_ports %>; i++)
+      {
+        cvReleaseImage(&images[i]) ;
+      }
+    }
+  }
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername) %> "::process Thread", DBG_ASP) ;
+}
+
+// Tuple processing for mutating ports
+void MY_OPERATOR::process(Tuple & tuple, uint32_t port)
+{
+       SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %> << port, DBG_ASP);
+      
+       if (getPE().getShutdownRequested( ))
+       {
+         return ;
+       }
+
+       IPort0Type & <%= $inTupleName %> = static_cast<IPort0Type &>(tuple);
+       IplImage* img = NULL ;
+       <%= copy2img(undef, "$inTupleName", "img") %> ;
+      
+       if (!img)
+       {
+         THROW(SPLRuntimeOperator, "Unable to create image") ;
+       }
+      
+       AutoMutex lck(_mutex) ;
+
+       if (_image_list[port].size( ) > _max_list_size)
+       {
+         cvReleaseImage(&img) ;
+         THROW(SPLRuntimeOperator, "More than " << _max_list_size << " images are already queued for port " << port) ;
+       }
+
+       _image_list[port].push_back(img) ;
+
+       SPLLOG(L_DEBUG, "Adding image to port " << port << ". " << _image_list[port].size( ) << " images in the list now", DBG_ASP);
+
+       _new_image.broadcast( ) ;
+}
+
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  if (punct==Punctuation::WindowMarker)
+  {
+    AutoMutex lck(_mutex) ;
+    
+    _punct_received[port] = true ;
+    
+    _new_image.broadcast( ) ;
+  }
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

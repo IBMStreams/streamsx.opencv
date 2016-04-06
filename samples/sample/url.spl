@@ -1,0 +1,28 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012, 2013
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite url {
+
+  	graph
+    
+    stream<IplImage> video = CaptureFromURL() {
+      	param
+        url: "http://207.251.86.238/cctv303.jpg"; // NYC, Lex at 42nd, from http://nyctmc.org
+        rate: 1;
+        dieonerror: 0; }
+
+    stream<IplImage> statsVideo = Stats(video) {}
+
+    () as ViewerSink = X11Viewer(statsVideo) {
+      	param
+        display: getEnvironmentVariable("DISPLAY"); } 
+}

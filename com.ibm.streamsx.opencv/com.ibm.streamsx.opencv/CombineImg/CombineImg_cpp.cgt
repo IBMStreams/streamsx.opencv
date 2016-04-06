@@ -1,0 +1,298 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+#include <opencv.h>
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+
+my $num_ports = $model->getNumberOfInputPorts();
+
+my @offset = get_param($model, "offset", [0,0]) ;
+SPL::CodeGen::error("parameter 'offset' should be a pair") if @offset && $#offset != 1 ;
+
+my $opacity = get_param($model, "opacity", 100) ;
+
+%>
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR() :
+  _max_list_size(1024)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  _offset_x = <%= $offset[0] %> ;
+  _offset_y = <%= $offset[1] %> ;
+  _opacity = <%= $opacity %> ;
+
+  _punct_received = new bool[<%= $num_ports %>] ;
+
+  <% for (my $i=0; $i < $num_ports; $i++)
+  { %>
+    _punct_received[<%= $i %>] = false ; <% }
+  %> ;
+
+  SPLLOG(L_INFO, "Parameter: offset=" << _offset_x << "x" << _offset_y
+         << " opacity=" << _opacity << "%", DBG_ASP) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  AutoMutex lck(_mutex) ;
+
+  <% for (my $i=0; $i < $num_ports; $i++)
+  { %>
+
+    {
+      list_<%= $i %>_t::iterator it(_list_<%= $i %>.begin( )) ;
+
+      while (it != _list_<%= $i %>.end( ))
+      {
+        delete *it ;
+
+        it++ ;
+      }
+    } <% }
+  %> ;
+
+  delete[] _punct_received ;
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  createThreads(1);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  _new_image.broadcast( ) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+// Processing for source and threaded operators   
+void MY_OPERATOR::process(uint32_t idx)
+{
+  mergeLoop();
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & tuple, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  if (getPE().getShutdownRequested( ))
+  {
+    return ;
+  }
+
+  <% for (my $pid=0; $pid < $num_ports; $pid++)
+  { %>
+    if (<%= $pid %> == port) { 
+
+  ptype_<%= $pid %>_t* copy_tuple = new ptype_<%= $pid %>_t(tuple) ;
+
+  AutoMutex lck(_mutex) ;
+
+  if (_list_<%= $pid %>.size( ) > _max_list_size)
+  {
+    delete copy_tuple ;
+    THROW(SPLRuntimeOperator, "More than " << _max_list_size << " images are already queued for port " << port) ;
+  }
+
+  _list_<%= $pid %>.push_back(copy_tuple) ;
+
+  SPLLOG(L_DEBUG, "Adding image to port " << <%= $pid %> << " (" << port << "). " << _list_<%= $pid %>.size( ) << " images in the list now", DBG_ASP);
+
+  _new_image.broadcast( ) ;
+}
+  <% } %>
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+void MY_OPERATOR::mergeLoop( )
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::mergeLoop") %>, DBG_ASP);
+  
+  AutoMutex lck(_mutex) ;
+  
+  while (!getPE().getShutdownRequested( ))
+  {
+    bool ready = true ;
+    
+    SPLLOG(L_TRACE, "Checking punctuation....", DBG_ASP) ;
+
+    <% for (my $i=0; $i < $num_ports; $i++)
+    { %>
+    
+      if (!_punct_received[<%= $i %>])
+      {
+        ready = false ;
+      } <% }
+    %> ;
+
+    SPLLOG(L_TRACE, "Punctuation ready: " << ready, DBG_ASP) ;
+
+    if (ready)
+    {
+      SPLLOG(L_DEBUG, "Punctuation received from all port. Propagating it", DBG_ASP) ;
+      submit(Punctuation::WindowMarker, 0) ;
+
+      <% for (my $i=0; $i < $num_ports; $i++)
+      { %>
+        _punct_received[<%= $i %>] = false ; <% }
+      %> ;
+    }
+
+    SPLLOG(L_TRACE, "Checking images....", DBG_ASP) ;
+
+    ready = true ;
+
+    <% for (my $i=0; $i < $num_ports; $i++)
+    { %>
+
+      if (_list_<%= $i %>.size( ) == 0)
+      {
+        SPLLOG(L_DEBUG, "Image #" << <%= $i %> << " is still missing", DBG_ASP) ;
+        ready = false ;
+      } <% }
+    %> ;
+
+    SPLLOG(L_TRACE, "Images ready: " << ready, DBG_ASP) ;
+
+    if (!ready)
+    {
+      _new_image.wait(_mutex) ;
+    }
+    else
+    {
+      SPLLOG(L_DEBUG, "We have all the images. Processing now...", DBG_ASP);
+
+      <% for (my $i=0; $i < $num_ports; $i++)
+      { %>
+
+        ptype_<%= $i %>_t* tuple_<%= $i %> = _list_<%= $i %>.front( ) ;
+        _list_<%= $i %>.pop_front( ) ;
+
+        ptype_<%= $i %>_t& <%=$model->getInputPortAt($i)->getCppTupleName()%> __attribute__ ((unused)) = *tuple_<%= $i %> ;
+ 
+        IplImage* image_<%= $i %> = NULL ;
+        <%= copy2img(undef, "*tuple_$i", "image_$i") %> ;
+
+        if (image_<%= $i %> == NULL)
+        {
+          THROW(SPLRuntimeOperator, "Unable to allocate image") ;
+        } <% }
+      %> ;
+
+      bool compatible_images = true ;
+
+      <% for (my $i=1; $i < $num_ports; $i++)
+      { %>
+
+        if (image_0->nChannels != image_<%= $i %>->nChannels ||
+            image_0->depth != image_<%= $i %>->depth)
+        {
+          SPLLOG(L_ERROR, "Unable to combine images with different channels or depth "
+                 << "(A: " << IINFO(image_0)
+                 << " B: " << IINFO(image_<%= $i %>) << ")", DBG_ASP) ;
+
+          compatible_images = false ;
+        } <% }
+      %> ;
+
+      if (compatible_images)
+      {
+        IplImage* a = image_0 ;
+        IplImage* b = image_1 ;
+
+        int x0 = MAX(0, _offset_x) ;
+        int y0 = MAX(0, _offset_y) ;
+
+        int x1 = MIN(a->width, b->width + _offset_x) ;
+        int y1 = MIN(a->height, b->height + _offset_y) ;
+
+        for(int y=0; y<y1-y0; y++)
+        {
+          uint8_t* data_a = (uint8_t*)a->imageData + ((y + y0) * a->widthStep) ;
+          uint8_t* data_b = (uint8_t*)b->imageData + ((y + (_offset_y < 0 ? -_offset_y : 0)) * b->widthStep) ;
+
+          for(int x=0; x<x1-x0; x++)
+          {
+            for(int c=0; c < a->nChannels; c++)
+            {
+              uint8_t* pixel_a = data_a + ((a->nChannels * (x + x0)) + c) ;
+              uint8_t* pixel_b = data_b + ((b->nChannels * (x + (_offset_x < 0 ? -_offset_x : 0))) + c) ;
+
+              *pixel_a = (uint8_t)((int32_t)*pixel_a + ((((int32_t)*pixel_b - (int32_t)*pixel_a) * _opacity) / 100)) ;
+            }
+          }
+        }
+
+        OPort0Type otuple ;
+        <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+        <%= copy2tuple(undef, "a", "otuple") %>;
+
+        submit(otuple, 0);
+      }
+
+      <% for (my $i=0; $i < $num_ports; $i++)
+      { %>
+        cvReleaseImage(&image_<%= $i %>) ;
+        delete tuple_<%= $i %> ; <% }
+      %> ;
+    }
+  }
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::mergeLoop") %>, DBG_ASP);
+}
+
+
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  submit(punct, 0) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

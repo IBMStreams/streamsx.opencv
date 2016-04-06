@@ -1,0 +1,513 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+#include <format.h>
+#include <opencv.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <zlib.h>
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+
+my $hostname = get_param($model, "hostname", undef);
+my $do_listen = get_param($model, "listen", 0);
+my $port = get_param($model, "port", undef);
+my $do_banner = get_param($model, "banner", 0);
+
+SPL::CodeGen::error("Missing 'hostname' or 'listen' parameter") unless $do_listen || $hostname ;
+
+%>
+
+#define DBG_ASP "opencv"
+
+using namespace std;
+using namespace dpssupport::format;
+using namespace dpssupport::opencv;
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR()
+  : MY_BASE_OPERATOR(),
+  _do_banner(true)
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  try
+  {
+    cvInitFont(&_font, CV_FONT_HERSHEY_SIMPLEX, 0.5, 0.5, 0.0, 1, CV_AA) ;
+  }
+  catch(cv::Exception& exc)
+  {
+    THROW(SPLRuntimeOperator, "Unable to create font") ;
+  }
+
+  _do_banner = <%= $do_banner %> ;
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+    createThreads(1); // Create source thread
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+int MY_OPERATOR::readBytes(int fd, void* buffer, uint32_t size)
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::readBytes") %>, DBG_ASP);
+
+  uint8_t* ptr = (uint8_t*)buffer ;
+
+  fd_set rfds;
+  struct timeval tv;
+  int retval;
+
+  while(size)
+  {
+    FD_ZERO(&rfds);
+    FD_SET(fd, &rfds);
+
+    tv.tv_sec = 0;
+    tv.tv_usec = 100 * 1000 ;
+
+    retval = select(fd + 1, &rfds, NULL, NULL, &tv);
+
+    if (retval == -1)
+    {
+      THROW(SPLRuntimeOperator, "select() failed: " << ErrnoFormat(errno)) ;
+    }
+
+    if (retval == 1)
+    {
+      ssize_t s = read(fd, ptr, size) ;
+
+      if (s < 0)
+      {
+        SPLLOG(L_ERROR, "Unable to read to socket: " << ErrnoFormat(errno), DBG_ASP) ;
+        return 0 ;
+      }
+
+      if (s == 0)
+      {
+        SPLLOG(L_ERROR, "Unable to read to socket: disconnected", DBG_ASP) ;
+        return 0 ;
+      }
+
+      size -= s ;
+      ptr += s ;
+    }
+
+    if (getPE().getShutdownRequested( ))
+    {
+      return 0 ;
+    }
+  }
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::readbytes") %>, DBG_ASP);
+
+  return 1 ;
+}
+
+void MY_OPERATOR::printMsg(const char* message, int width, int height)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::printMsg") %>, DBG_ASP);
+  SPLLOG(L_INFO, "Message: " << message, DBG_ASP) ;
+
+  if (_do_banner)
+  {
+    IplImage* img = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U, 1) ;
+    CvSize txt_size ;
+    int baseline = 0 ;
+
+    cvGetTextSize(message, &_font, &txt_size, &baseline) ;
+    cvSet(img, cvScalar(0)) ;
+    cvPutText(img, message, cvPoint((width - txt_size.width) / 2, (height + txt_size.height) / 2), &_font, cvScalarAll(255)) ;
+
+    OPort0Type otuple;
+    <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+    <%= copy2tuple(undef, "img", "otuple") %>;
+
+    cvReleaseImage(&img) ;
+
+    submit(otuple, 0);
+  }
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::printMsg") %>, DBG_ASP);
+}
+
+int MY_OPERATOR::establishConnection(bool do_listen, const char* hostname, int port)
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::establishConnection") %>, DBG_ASP);
+
+  if (do_listen)
+  {
+    char* buffer = NULL ;
+    if (asprintf(&buffer, "Waiting for connection on port %d...", port) <= 0)
+    {
+      THROW(SPLRuntimeOperator, "asprintf failed") ;
+    }
+    printMsg(buffer, 320, 240) ;
+    free(buffer) ;
+
+    int listen_sock_fd = socket(AF_INET, SOCK_STREAM, 0) ;
+
+    if(listen_sock_fd < 0)
+    {
+      THROW(SPLRuntimeOperator, "Unable to open socket: " << ErrnoFormat(errno)) ;
+    }
+
+    struct sockaddr_in servaddr ;
+    memset(&servaddr, 0, sizeof(servaddr)) ;
+    servaddr.sin_family = AF_INET ;
+    servaddr.sin_addr.s_addr = htonl(INADDR_ANY) ;
+    servaddr.sin_port = htons(port) ;
+
+    const int on = 1 ;
+    setsockopt(listen_sock_fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) ;
+
+    if (bind(listen_sock_fd, (struct sockaddr*)&servaddr, sizeof(servaddr)))
+    {
+      close(listen_sock_fd) ;
+      THROW(SPLRuntimeOperator, "Unable to bind to port " << port << ": " << ErrnoFormat(errno)) ;
+    }
+
+    if (listen(listen_sock_fd, 16))
+    {
+      close(listen_sock_fd) ;
+      THROW(SPLRuntimeOperator, "listen() failed: " << ErrnoFormat(errno)) ;
+    }
+
+    struct sockaddr_in myaddr_in ;
+    socklen_t addrlen = sizeof(myaddr_in);
+    if (getsockname(listen_sock_fd, (struct sockaddr *)&myaddr_in, &addrlen))
+    {
+      close(listen_sock_fd) ;
+      THROW(SPLRuntimeOperator, "getsockname failed: " << ErrnoFormat(errno)) ;
+    }
+
+    port = ntohs(myaddr_in.sin_port) ;
+
+    SPLLOG(L_INFO, "listening on port " << port, DBG_ASP) ;
+
+    fd_set rfds;
+    struct timeval tv;
+    int retval;
+
+    for(;;)
+    {
+      FD_ZERO(&rfds);
+      FD_SET(listen_sock_fd, &rfds);
+
+      tv.tv_sec = 0;
+      tv.tv_usec = 100 * 1000 ;
+
+      retval = select(listen_sock_fd + 1, &rfds, NULL, NULL, &tv);
+
+      if (retval == -1)
+      {
+        THROW(SPLRuntimeOperator, "select() failed: " << ErrnoFormat(errno)) ;
+      }
+
+      if (retval == 1)
+      {
+        break ;
+      }
+
+      if (getPE().getShutdownRequested( ))
+      {
+        return -1 ;
+      }
+    }
+
+    struct sockaddr_in cliaddr ;
+    socklen_t clilen = sizeof(cliaddr) ;
+    memset(&cliaddr, 0, sizeof(cliaddr)) ;
+
+    int sock_fd = accept(listen_sock_fd, (struct sockaddr*) &cliaddr, &clilen) ;
+
+    if (sock_fd < 0)
+    {
+      close(listen_sock_fd) ;
+      THROW(SPLRuntimeOperator, "accept() failed: " << ErrnoFormat(errno)) ;
+    }
+
+    close(listen_sock_fd) ;
+
+    SPLLOG(L_INFO, "Connection with '" << inet_ntoa(cliaddr.sin_addr) << ":" << ntohs(cliaddr.sin_port) << "' opened", DBG_ASP) ;
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::establishConnection") %>, DBG_ASP);
+
+    return sock_fd ;
+  }
+  else
+  {
+    char* buffer = NULL ;
+    if (asprintf(&buffer, "Connecting to %s:%d", hostname, port) <= 0)
+    {
+      THROW(SPLRuntimeOperator, "asprintf failed") ;
+    }
+    printMsg(buffer, 320, 240) ;
+    free(buffer) ;
+
+    int sock_fd = socket(AF_INET, SOCK_STREAM, 0) ;
+
+    if(sock_fd == -1)
+    {
+      THROW(SPLRuntimeOperator, "Unable to open socket: " << ErrnoFormat(errno)) ;
+    }
+
+    struct sockaddr_in servaddr ;
+    memset(&servaddr, 0, sizeof(servaddr)) ;
+    servaddr.sin_family = AF_INET ;
+    servaddr.sin_addr.s_addr = htonl(INADDR_ANY) ;
+    servaddr.sin_port = htons(port) ;
+
+    if (inet_pton(AF_INET, hostname, &servaddr.sin_addr) <= 0)
+    {
+      struct hostent *h = gethostbyname(hostname) ;
+
+      if (h == NULL)
+      {
+        close(sock_fd) ;
+        THROW(SPLRuntimeOperator, "Invalid address: " << hostname) ;
+      }
+
+      SPLLOG(L_INFO, "resolving '" << QT(hostname) << " to " << QT(h->h_name), DBG_ASP) ;
+
+      char** ptr = h->h_addr_list ;
+      if (ptr == NULL || *ptr == NULL)
+      {
+        close(sock_fd) ;
+        THROW(SPLRuntimeOperator, "No result found for address: " << hostname) ;
+      }
+
+      memcpy(&servaddr.sin_addr, *ptr, h->h_length) ;
+    }
+
+    for(;;)
+    {
+      if (connect(sock_fd, (struct sockaddr*) &servaddr, sizeof(servaddr)) == 0)
+      {
+        break ;
+      }
+      else
+      {
+        SPLLOG(L_ERROR, "Failed to connect to " << hostname << ": " << ErrnoFormat(errno) << "... Retrying in 1s", DBG_ASP) ;
+        sleep(1) ;
+      }
+
+      if (getPE().getShutdownRequested( ))
+      {
+        return -1 ;
+      }
+    }
+
+    SPLLOG(L_INFO, "Connection with '" << hostname << "' opened", DBG_ASP) ;
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::establishConnection") %>, DBG_ASP);
+
+    return sock_fd ;
+  }
+}
+
+
+// Processing for source and threaded operators   
+void MY_OPERATOR::process(uint32_t idx)
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  const char* hostname = NULL ;
+
+  <% if ($hostname)
+  { %>
+    string hn(<%= qt($hostname) %>) ;
+    hostname = hn.c_str( ) ;
+    <% } %> ;
+
+  int port = <%= $port %> ;
+  bool do_listen = <%= $do_listen %> ;
+  uint64_t frame_count = 0 ;
+  int sock_fd = establishConnection(do_listen, hostname, <%= $port %>) ;
+
+  if (getPE().getShutdownRequested( ))
+  {
+    return ;
+  }
+
+  proxy_frame_t pf ;
+  uint8_t* pf_data = NULL ;
+  uint32_t pf_data_size = 0 ;
+  uint8_t* pf_comp_data = NULL ;
+  uint32_t pf_comp_data_size = 0 ;
+  memset(&pf, 0, sizeof(proxy_frame_t)) ;
+
+  while (!getPE().getShutdownRequested( ))
+  {
+    if (!readBytes(sock_fd, &pf, sizeof(proxy_frame_t)))
+    {
+      SPLLOG(L_ERROR, "Unable to read from connection. closing connection", DBG_ASP) ;
+
+      close(sock_fd) ;
+      sock_fd = establishConnection(do_listen, hostname, port) ;
+      continue ;
+    }
+
+    if (ntohl(pf.magic) != 0xDEADBEEF)
+    {
+      SPLLOG(L_ERROR, "Bad magic " << ntohl(pf.magic) << ". closing connection", DBG_ASP) ;
+
+      close(sock_fd) ;
+      sock_fd = establishConnection(do_listen, hostname, port) ;
+      continue ;
+    }
+
+    pf.compressed_size = ntohl(pf.compressed_size) ;
+    pf.real_size = ntohl(pf.real_size) ;
+    pf.width = ntohl(pf.width) ;
+    pf.width_step = ntohl(pf.width_step) ;
+    pf.height = ntohl(pf.height) ;
+    pf.depth = ntohl(pf.depth) ;
+    pf.channels = ntohl(pf.channels) ;
+
+    if (pf.compressed_size > (1600*1200*3) ||
+        pf.real_size > (1600*1200*3))
+    {
+      SPLLOG(L_ERROR, "Incoming image too large. closing connection", DBG_ASP) ;
+
+      close(sock_fd) ;
+      sock_fd = establishConnection(do_listen, hostname, port) ;
+      continue ;
+    }
+
+    if (pf_data_size < pf.real_size)
+    {
+      if (pf_data_size)
+      {
+        free(pf_data) ;
+      }
+
+      pf_data_size = pf.real_size ;
+      pf_data = (uint8_t*)malloc(pf_data_size) ;
+    }
+
+    if (pf.compressed_size != pf.real_size)
+    {
+      if (pf_comp_data_size < pf.real_size)
+      {
+        if (pf_comp_data_size)
+        {
+          free(pf_comp_data) ;
+        }
+
+        pf_comp_data_size = pf.real_size ;
+        pf_comp_data = (uint8_t*)malloc(pf_comp_data_size) ;
+      }
+
+      if (!readBytes(sock_fd, pf_comp_data, pf.compressed_size))
+      {
+        SPLLOG(L_ERROR, "Unable to read from connection. closing connection", DBG_ASP) ;
+
+        close(sock_fd) ;
+        sock_fd = establishConnection(do_listen, hostname, port) ;
+        continue ;
+      }
+
+      uLongf expended_size = pf_data_size ;
+      int comp_error = uncompress(pf_data, &expended_size, pf_comp_data, pf_comp_data_size) ;
+
+      if (comp_error != Z_OK)
+      {
+        SPLLOG(L_ERROR, "Unable to decompress data: " << zError(comp_error) << "(" << comp_error << ")", DBG_ASP) ;
+
+        close(sock_fd) ;
+        sock_fd = establishConnection(do_listen, hostname, port) ;
+        continue ;
+      }
+
+      if (expended_size != pf.real_size)
+      {
+        SPLLOG(L_ERROR, "Compression error: expecting " << pf.real_size << " bytes, got " << expended_size, DBG_ASP) ;
+
+        close(sock_fd) ;
+        sock_fd = establishConnection(do_listen, hostname, port) ;
+        continue ;
+      }
+    }
+    else
+    {
+      if (!readBytes(sock_fd, pf_data, pf.compressed_size))
+      {
+        SPLLOG(L_ERROR, "Unable to read from connection. closing connection", DBG_ASP) ;
+
+        close(sock_fd) ;
+        sock_fd = establishConnection(do_listen, hostname, port) ;
+        continue ;
+      }
+    }
+
+    IplImage* frame = cvCreateImageHeader(cvSize(pf.width, pf.height), pf.depth, pf.channels) ;
+
+    if ((uint32_t)frame->widthStep != pf.width_step)
+    {
+      THROW(SPLRuntimeOperator, "Incompatible width step value: " << frame->widthStep << " and " << pf.width_step) ;
+    }
+
+    frame->imageData = (char*)pf_data ;
+
+    OPort0Type otuple;
+    <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+    <%= copy2tuple(undef, "frame", "otuple") %>;
+
+    submit(otuple, 0);
+
+    cvReleaseImageHeader(&frame) ;
+    frame_count++ ;
+  }
+
+  close(sock_fd) ;
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

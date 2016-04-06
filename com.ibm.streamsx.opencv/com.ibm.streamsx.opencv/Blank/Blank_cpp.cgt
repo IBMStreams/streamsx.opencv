@@ -1,0 +1,194 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+#include <opencv.h>
+#include <opencv/highgui.h>
+#include <sys/time.h>
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind();
+
+my $frame_rate = get_param($model, "fps", 20) ;
+my $frame_width = get_param($model, "width", 640);
+my $frame_height = get_param($model, "height", 480);
+my $frame_count = get_param($model, "count", undef);
+my $channels = get_param($model, "channels", 1);
+
+###my $image = get_param($model, "image", undef);
+my $image = $model->getParameterByName("image") ? $model->getParameterByName("image")->getValueAt(0)->getCppExpression() : undef;
+
+my @colors = get_param($model, "color", [0]);
+
+SPL::CodeGen::error("Channels must be 1 or 3") unless $channels == 1 || $channels == 3;
+
+SPL::CodeGen::error("The color component does not match the number of channels") unless $#colors == ($channels -1);
+
+%>
+
+using namespace std;
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR()
+{
+  SPLLOG(L_TRACE,  <%=qt("Entering ".$opername) %>, DBG_ASP);
+
+  if (<%= $frame_rate %> > 0)
+  {
+    _inter_frame_delay = 1000 / <%= $frame_rate %> ;
+  }
+  else
+  {
+    _inter_frame_delay = -1 ;
+  }
+
+  SPLLOG(L_TRACE,  <%=qt("Exiting ".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE,  <%=qt("Entering ~".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE,  <%=qt("Exiting ~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE,  <%=qt("Entering ".$opername."::allPortsReady") %>, DBG_ASP);
+
+  createThreads(1); // Create source thread
+
+  SPLLOG(L_TRACE,  <%=qt("Exiting ".$opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+  SPLLOG(L_TRACE,  <%=qt("Entering ".$opername."::prepareToShutdown") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE,  <%=qt("Exiting ".$opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+static uint64_t now_ms()
+{
+  struct timeval tv ;
+  gettimeofday(&tv, NULL) ;
+  uint64_t res = tv.tv_sec ;
+  res = res * 1000LL ;
+  res = res + (tv.tv_usec / 1000) ;
+  return res ;
+}
+
+// Processing for source and threaded operators   
+void MY_OPERATOR::process(uint32_t idx)
+{
+  SPLLOG(L_TRACE,  <%=qt("Entering ".$opername."::process") %>, DBG_ASP);
+
+  uint64 frame_count = 0;
+
+  <% if ($image)
+  { %>
+
+    string filename(<%=$image%>) ;
+    IplImage* img = cvLoadImage(filename.c_str( ), CV_LOAD_IMAGE_UNCHANGED) ;
+
+    <% }
+  else
+  { %>
+
+    IplImage* img = cvCreateImage(cvSize(<%= $frame_width %>, <%= $frame_height %>),
+                                  IPL_DEPTH_8U, <%= $channels %>) ;
+
+    for(int y=0; y<img->height; y++)
+    {
+      uint8_t* ptr = (uint8_t*)(img->imageData + y * img->widthStep) ;
+
+      for(int x=0; x<img->width; x++)
+      {
+        <% if ($channels == 3)
+           { %>
+             ptr[3*x  ] = <%= $colors[0] %> ;
+             ptr[3*x+1] = <%= $colors[1] %> ;
+             ptr[3*x+2] = <%= $colors[2] %> ;
+        <% }
+           else
+           { %>
+             ptr[x] = <%= $colors[0] %>;
+        <% } %>
+      }
+    }
+
+    <% } %> ;
+
+  OPort0Type otuple;
+  <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+  <%= copy2tuple(undef, "img", "otuple") %>;
+  
+    // A typical implementation will loop until shutdown
+  while(!getPE().getShutdownRequested())
+  {
+
+    uint64_t t1 = now_ms();
+
+    SPLLOG(L_TRACE, "Sending frame #" << frame_count, DBG_ASP);
+
+    submit(otuple, 0);
+
+    frame_count++ ;
+
+    if (_inter_frame_delay > 0)
+    {
+      unsigned long long t2 = now_ms();
+
+      if (t2 - t1 < (uint32)_inter_frame_delay)
+      {
+        int d = (_inter_frame_delay - (t2 - t1)) ;
+        SPLLOG(L_DEBUG, "Sleeping " << d << "ms before the next frame", DBG_ASP) ;
+        usleep(1000 * d) ;
+      }
+      else
+      {
+        SPLLOG(L_TRACE, "We're running too slow!! " << t2 - t1 << "ms elapsed since last frame", DBG_ASP);
+      }
+    }
+
+    <% if ($frame_count)
+       { %>
+         if (frame_count >= (uint32)<%= $frame_count %>)
+         {
+           submit(Punctuation::WindowMarker, 0);
+
+           break;
+         }
+    <% } %>
+  }
+
+  cvReleaseImage(&img);
+
+  SPLLOG(L_TRACE,  <%=qt("Exiting ".$opername."::process") %>, DBG_ASP);
+}
+
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

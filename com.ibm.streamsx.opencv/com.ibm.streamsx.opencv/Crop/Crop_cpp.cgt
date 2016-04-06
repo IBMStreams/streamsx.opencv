@@ -1,0 +1,130 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+#include <opencv.h>
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+%>
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR()
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & tuple, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  IplImage* img_in = NULL ;
+  const IPort0Type & iport$0 = static_cast<const IPort0Type &>(tuple);
+
+  uint32_t x = <%=$model->getParameterByName("topleft")->getValueAt(0)->getCppExpression()%>;	
+  uint32_t y = <%=$model->getParameterByName("topleft")->getValueAt(1)->getCppExpression()%>;	
+  uint32_t width = (<%=$model->getParameterByName("bottomright")->getValueAt(0)->getCppExpression()%>) - x;
+  uint32_t height = (<%=$model->getParameterByName("bottomright")->getValueAt(1)->getCppExpression()%>) - y;
+
+  <%= copy2img(undef, "iport\$0", "img_in") %> ;
+
+  IplImage* img_out = cvCreateImage(cvSize(width,height),
+                                  iport$0.get_ipl_depth(),
+                                  iport$0.get_ipl_channels()) ;
+
+  if (!img_in || !img_out)
+  {
+    THROW(SPLRuntimeOperator, "Unable to create images") ;
+  }
+  else
+  {
+    /* check for invalid crop rectangle  */
+    if((x < 0 || x > img_in->width) ||
+       (y < 0 || y > img_in->height) ||
+       (width < 0 || width > img_in->width) ||
+       (height < 0 || height > img_in->height))
+    {
+      THROW(SPLRuntimeOperator, "Invalid crop rectangle, both top-left and bottom-right corners must be within input image's dimensions") ;
+    }
+
+    /* crop image and copy to output */
+    cvSetImageROI(img_in, cvRect(x, y, width, height));
+    cvCopy(img_in, img_out, NULL);
+    cvResetImageROI(img_in);
+
+    cvReleaseImage(&img_in) ;
+
+    OPort0Type otuple ;
+    <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+    <%= copy2tuple(undef, "img_out", "otuple") %> ;
+    cvReleaseImage(&img_out) ;
+
+    <%
+    if ($model->getOutputPortAt(0)->getAttributeByName("ipl_x")) { print "otuple.set_ipl_x(x);\n"; }
+    if ($model->getOutputPortAt(0)->getAttributeByName("ipl_y")) { print "otuple.set_ipl_y(y);\n"; }
+    %>
+
+    submit(otuple, 0);
+  }
+  
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  submit(punct, 0) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

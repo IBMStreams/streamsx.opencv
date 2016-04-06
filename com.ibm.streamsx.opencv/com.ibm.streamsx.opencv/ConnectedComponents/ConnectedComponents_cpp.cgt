@@ -1,0 +1,207 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+/*
+  The code for this operator is inspired by the examples from chapter
+  9 of the book "Learning OpenCV: Computer Vision with the OpenCV
+  Library". The example from the books are provded with the following license:
+
+  **************************************************
+   Oct. 3, 2008
+   Right to use this code in any way you want without warrenty, support or any guarentee of it working.
+
+   BOOK: It would be nice if you cited it:
+   Learning OpenCV: Computer Vision with the OpenCV Library
+     by Gary Bradski and Adrian Kaehler
+     Published by O'Reilly Media, October 3, 2008
+ 
+   AVAILABLE AT: 
+     http://www.amazon.com/Learning-OpenCV-Computer-Vision-Library/dp/0596516134
+     Or: http://oreilly.com/catalog/9780596516130/
+     ISBN-10: 0596516134 or: ISBN-13: 978-0596516130    
+
+   OTHER OPENCV SITES:
+   * The source code is on sourceforge at:
+     http://sourceforge.net/projects/opencvlibrary/
+   * The OpenCV wiki page (As of Oct 1, 2008 this is down for changing over servers, but should come back):
+     http://opencvlibrary.sourceforge.net/
+   * An active user group is at:
+     http://tech.groups.yahoo.com/group/OpenCV/
+   * The minutes of weekly OpenCV development meetings are at:
+     http://pr.willowgarage.com/wiki/OpenCV
+   **************************************************
+*/
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+my $inTupleName = $model->getInputPortAt(0)->getCppTupleName(); 
+
+my $hull = get_param($model, "hull", 0) ;
+my $perim = get_param($model, "perim", 4) ;
+
+%>
+
+#undef LOG_INFO // conflict with syslog
+#include <opencv.h>
+
+using namespace std;
+using namespace dpssupport::opencv;
+
+#define DBG_ASP "opencv"
+
+#define CV_CVX_WHITE	CV_RGB(0xff,0xff,0xff)
+#define CV_CVX_BLACK	CV_RGB(0x00,0x00,0x00)
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR()
+  : MY_BASE_OPERATOR(),
+  _hull(false),
+  _perim(4.0),
+  _mem_storage(NULL)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  _hull = <%= $hull %> ;
+  _perim = <%= $perim %> ;
+
+  _mem_storage = cvCreateMemStorage(0) ;
+
+  SPLLOG(L_INFO, "Parameters: hull=" << _hull << " perim=" << _perim, DBG_ASP) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  cvReleaseMemStorage(&_mem_storage) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & tuple, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  const IPort0Type & <%= $inTupleName %> = static_cast<const IPort0Type &>(tuple);
+
+  if (<%= $inTupleName %>.get_ipl_depth( ) != IPL_DEPTH_8U)
+  {
+    SPLLOG(L_ERROR, "Only IPL_DEPTH_8U supported. Got " << depth2string(<%= $inTupleName %>.get_ipl_depth( )), DBG_ASP) ;
+  }
+
+  IplImage* img_in = NULL ;
+
+  <%= copy2img(undef, "$inTupleName", "img_in") %> ;
+
+  if (!img_in)
+  {
+    THROW(SPLRuntimeOperator, "Unable to create image") ;
+  }
+
+  cvClearMemStorage(_mem_storage) ;
+
+  cvMorphologyEx(img_in, img_in, NULL, NULL, CV_MOP_OPEN, 1) ;
+  cvMorphologyEx(img_in, img_in, NULL, NULL, CV_MOP_CLOSE, 1) ;
+
+  CvContourScanner scanner = cvStartFindContours(img_in, _mem_storage, sizeof(CvContour), CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE) ;
+  CvSeq* c ;
+  int numCont = 0 ;
+  while ((c = cvFindNextContour(scanner)) != NULL)
+  {
+    double len = cvContourPerimeter(c) ;
+    double q = (img_in->height + img_in->width) / _perim;  // calculate perimeter len threshold
+    if(len < q) // Get rid of blob if it's perimeter is too small
+    {
+      cvSubstituteContour(scanner, NULL) ;
+    }
+    else // Smooth it's edges if it's large enough
+    {
+      CvSeq* c_new;
+
+      if(!_hull)
+      {
+        // Polygonal approximation of the segmentation
+        c_new = cvApproxPoly(c, sizeof(CvContour), _mem_storage, CV_POLY_APPROX_DP, 2, 0);
+      }
+      else
+      {
+        // Convex Hull of the segmentation
+        c_new = cvConvexHull2(c, _mem_storage, CV_CLOCKWISE, 1);
+      }
+
+      cvSubstituteContour(scanner, c_new) ;
+      numCont++ ;
+    }
+  }
+
+  CvSeq* contours = cvEndFindContours(&scanner) ;
+  
+  // PAINT THE FOUND REGIONS BACK INTO THE IMAGE
+  cvZero(img_in) ;
+
+  // DRAW PROCESSED CONTOURS INTO THE MASK
+  for(c = contours; c != NULL; c = c->h_next)
+  {
+    cvDrawContours(img_in, c, CV_CVX_WHITE, CV_CVX_BLACK, -1 , CV_FILLED, 8);
+  }
+
+  OPort0Type otuple ;
+
+  <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+  <%= copy2tuple(undef, "img_in", "otuple") %> ;
+  cvReleaseImage(&img_in) ;
+
+  submit(otuple, 0);
+}
+
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  submit(punct, 0) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

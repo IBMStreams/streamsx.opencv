@@ -1,0 +1,39 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012, 2013
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite box
+{
+  graph
+    stream<IplImage> vid0 = CaptureFromURL() {
+      param
+        url: "http://207.251.86.238/cctv303.jpg"; // NYC, Lex at 42nd, from http://nyctmc.org
+        rate: 1;
+        dieonerror: 0; 
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> vid1 = MakeBox(vid0) {
+      param
+        topleft : 50, 50;
+        bottomright : 150, 150;
+        color : 255, 255, 10;
+        opacity : 50;
+    }
+
+    () as SinkOp1 = X11Viewer(vid1) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+      config
+        placement : partitionColocation("P1");
+    }
+}

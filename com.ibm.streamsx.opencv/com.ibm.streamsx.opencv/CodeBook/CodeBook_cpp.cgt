@@ -1,0 +1,519 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+/*
+  The code for this operator is inspired by the examples from chapter
+  9 of the book "Learning OpenCV: Computer Vision with the OpenCV
+  Library". The example from the books are provided with the following license:
+
+  **************************************************
+   Oct. 3, 2008
+   Right to use this code in any way you want without warranty, support or any guarantee of it working.
+
+   BOOK: It would be nice if you cited it:
+   Learning OpenCV: Computer Vision with the OpenCV Library
+     by Gary Bradski and Adrian Kaehler
+     Published by O'Reilly Media, October 3, 2008
+ 
+   AVAILABLE AT: 
+     http://www.amazon.com/Learning-OpenCV-Computer-Vision-Library/dp/0596516134
+     Or: http://oreilly.com/catalog/9780596516130/
+     ISBN-10: 0596516134 or: ISBN-13: 978-0596516130    
+
+   OTHER OPENCV SITES:
+   * The source code is on sourceforge at:
+     http://sourceforge.net/projects/opencvlibrary/
+   * The OpenCV wiki page:
+     http://opencvlibrary.sourceforge.net/
+   * An active user group is at:
+     http://tech.groups.yahoo.com/group/OpenCV/
+   * The minutes of weekly OpenCV development meetings are at:
+     http://pr.willowgarage.com/wiki/OpenCV
+   **************************************************
+*/
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+my $inTupleName = $model->getInputPortAt(0)->getCppTupleName();
+
+my $learning_time = get_param($model, "time", 10) ;
+my $banner = get_param($model, "banner", 0) ;
+
+%>
+
+#undef LOG_INFO // conflict with syslog
+#include <opencv.h>
+
+using namespace std;
+using namespace dpssupport::opencv;
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR()
+  : MY_BASE_OPERATOR(),
+  _codebook(NULL),
+  _num_channels(0),
+  _image_len(0),
+  _learning(true),
+  _learning_time(0),
+  _image_count(0),
+  _yuv_image(NULL),
+  _banner(false)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  _learning_time = <%= $learning_time %> ;
+
+  for(int nc=0; nc<MAX_CHANNELS; nc++)
+  {
+    // Learning bounds factor
+    _cb_bounds[nc] = 10 ;
+
+    // Allow threshold setting simultaneously for all channels
+    _adjusted_channels[nc] = true ;
+
+    _max_mod[nc] = 10;
+    _min_mod[nc] = 10;
+  }
+
+  // Set color thresholds to default values
+  _max_mod[0] = 3;
+
+  if (<%= $banner %>)
+  {
+    _banner = true ;
+    
+    try
+    {
+      cvInitFont(&_font, CV_FONT_HERSHEY_SIMPLEX, 0.5, 0.5, 0.0, 1, CV_AA) ;
+    }
+    catch(cv::Exception& exc)
+    {
+      THROW(SPLRuntimeOperator, "Unable to create font: " << exc) ;
+    }
+  }
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  if (_yuv_image)
+  {
+    cvReleaseImage(&_yuv_image) ;
+  }
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown()
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+///////////////////////////////////////////////////////////////////////////////////
+// int updateCodeBook(uint8_t *p, codeBook &c, unsigned cbBounds)
+// Updates the codebook entry with a new data point
+//
+// p			Pointer to a YUV pixel
+// c			Codebook for this pixel
+// cbBounds		Learning bounds for codebook (Rule of thumb: 10)
+// numChannels	Number of color channels we're learning
+//
+// NOTES:
+//		cvBounds must be of size cvBounds[numChannels]
+//
+// RETURN
+//	codebook index
+
+void MY_OPERATOR::updateCodeBook(uint8_t *p, codeBook_t &c)
+{
+  if (c.numEntries == 0)
+  {
+    c.t = 0;
+  }
+
+  c.t += 1;		//Record learning event
+
+  //SET HIGH AND LOW BOUNDS
+  unsigned int high[MAX_CHANNELS] ;
+  unsigned int low[MAX_CHANNELS];
+
+  for(int n=0; n<_num_channels; n++)
+  {
+    high[n] = p[n] + _cb_bounds[n] ;
+
+    if (high[n] > 255)
+    {
+      high[n] = 255;
+    }
+
+    low[n] = p[n] - _cb_bounds[n] ;
+
+    if(low[n] < 0)
+    {
+      low[n] = 0;
+    }
+  }
+
+  //SEE IF THIS FITS AN EXISTING CODEWORD
+
+  int entry_found = -1 ;
+
+  for(int i=0; i<c.numEntries; i++)
+  {
+    int matchChannel = 0 ;
+
+    for(int n=0; n<_num_channels; n++)
+    {
+      if((p[n] >= c.cb[i]->learnLow[n]) &&
+         (p[n] <= c.cb[i]->learnHigh[n])) // Found an entry for this channel
+      {
+        matchChannel++ ;
+      }
+    }
+
+    if(matchChannel == _num_channels) // If an entry was found over all channels
+    {
+      c.cb[i]->t_last_update = c.t ;
+
+      // adjust this codeword for the first channel
+
+      for(int n=0; n<_num_channels; n++)
+      {
+        if (c.cb[i]->max[n] < p[n])
+        {
+          c.cb[i]->max[n] = p[n] ;
+        }
+        else if (c.cb[i]->min[n] > p[n])
+        {
+          c.cb[i]->min[n] = p[n] ;
+        }
+      }
+
+      entry_found = i ;
+      break;
+    }
+  }
+
+  //OVERHEAD TO TRACK POTENTIAL STALE ENTRIES
+  for(int s=0; s<c.numEntries; s++)
+  {
+    //This garbage is to track which codebook entries are going stale
+    int negRun = c.t - c.cb[s]->t_last_update;
+    if(c.cb[s]->stale < negRun)
+    {
+      c.cb[s]->stale = negRun;
+    }
+  }
+
+
+  //ENTER A NEW CODE WORD IF NEEDED
+  if(entry_found == -1)  //No existing code word found, make a new one
+  {
+    entry_found = c.numEntries ;
+
+    code_element_t **new_ce = new code_element_t* [c.numEntries+1];
+
+    for(int i=0; i<c.numEntries; i++)
+    {
+      new_ce[i] = c.cb[i];
+    }
+
+    new_ce[c.numEntries] = new code_element_t;
+
+    if(c.numEntries)
+    {
+      delete [] c.cb;
+    }
+
+    c.cb = new_ce;
+
+    for(int n=0; n<_num_channels; n++)
+    {
+      c.cb[c.numEntries]->learnHigh[n] = high[n];
+      c.cb[c.numEntries]->learnLow[n] = low[n];
+      c.cb[c.numEntries]->max[n] = p[n];
+      c.cb[c.numEntries]->min[n] = p[n];
+    }
+
+    c.cb[c.numEntries]->t_last_update = c.t;
+    c.cb[c.numEntries]->stale = 0;
+    c.numEntries += 1;
+  }
+
+  //SLOWLY ADJUST LEARNING BOUNDS
+
+  for(int n=0; n<_num_channels; n++)
+  {
+    if (c.cb[entry_found]->learnHigh[n] < high[n])
+    {
+      c.cb[entry_found]->learnHigh[n] += 1 ;
+    }
+
+    if (c.cb[entry_found]->learnLow[n] > low[n])
+    {
+      c.cb[entry_found]->learnLow[n] -= 1 ;
+    }
+  }
+}
+
+///////////////////////////////////////////////////////////////////////////////////
+// uint8_t cvbackgroundDiff(uint8_t *p, codeBook &c, int minMod, int maxMod)
+// Given a pixel and a code book, determine if the pixel is covered by the codebook
+//
+// p		pixel pointer (YUV interleaved)
+// c		codebook reference
+// numChannels  Number of channels we are testing
+// maxMod	Add this (possibly negative) number onto max level when code_element determining if new pixel is foreground
+// minMod	Subract this (possible negative) number from min level code_element when determining if pixel is foreground
+//
+// NOTES:
+// minMod and maxMod must have length numChannels, e.g. 3 channels => minMod[3], maxMod[3].
+//
+// Return
+// 0 => background, 255 => foreground
+
+uint8_t MY_OPERATOR::backgroundDiff(uint8_t *p, codeBook_t &c)
+{
+  //SEE IF THIS FITS AN EXISTING CODEWORD
+
+  int i;
+
+  for(i=0; i<c.numEntries; i++)
+  {
+    int matchChannel = 0;
+
+    for(int n=0; n<_num_channels; n++)
+    {
+      if((c.cb[i]->min[n] - _min_mod[n] <= p[n]) &&
+         (p[n] <= c.cb[i]->max[n] + _max_mod[n]))
+      {
+        matchChannel++; //Found an entry for this channel
+      }
+      else
+      {
+        break;
+      }
+    }
+
+    if(matchChannel == _num_channels)
+    {
+      break; //Found an entry that matched all channels
+    }
+  }
+
+  if(i >= c.numEntries)
+  {
+    return 255 ;
+  }
+
+  return 0 ;
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & tuple, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  const IPort0Type & <%= $inTupleName %> = static_cast<const IPort0Type &>(tuple);
+
+  if (<%= $inTupleName %>.get_ipl_depth( ) != IPL_DEPTH_8U)
+  {
+    SPLLOG(L_ERROR, "Only IPL_DEPTH_8U supported. Got " << depth2string(<%= $inTupleName %>.get_ipl_depth( )), DBG_ASP) ;
+  }
+
+  IplImage* img_in = NULL ;
+
+  <%= copy2img(undef, "$inTupleName", "img_in") %> ;
+
+  if (!img_in)
+  {
+    THROW(SPLRuntimeOperator, "Unable to create image") ;
+  }
+
+  if(_image_count == 0)
+  {
+    if (img_in->nChannels > 1)
+    {
+      _yuv_image = cvCloneImage(img_in) ;
+    }
+
+    _image_len = img_in->width * img_in->height;
+    _num_channels = img_in->nChannels ;
+
+    _codebook = new codeBook_t[_image_len] ;
+
+    for(int f = 0; f<_image_len; f++)
+    {
+      _codebook[f].numEntries = 0 ;
+    }
+
+    _learning_start_ts = time(NULL) ;
+
+    SPLLOG(L_INFO, "First image received: " << IINFO(img_in), DBG_ASP) ;
+  }
+  else
+  {
+    if (_image_len != img_in->width * img_in->height ||
+        _num_channels != img_in->nChannels)
+    {
+      SPLLOG(L_ERROR, "Incoming image (" << IINFO(img_in) << ") does not match previous image size/channel. Dropping image", DBG_ASP) ;
+      return ;
+    }
+  }
+
+  _image_count++ ;
+
+  IplImage* img_yuv = NULL ;
+
+  if (_num_channels > 1)
+  {
+    cvCvtColor(img_in, _yuv_image, CV_BGR2YCrCb) ; // YUV For codebook method
+    img_yuv = _yuv_image ;
+  }
+  else
+  {
+    img_yuv = img_in ;
+  }
+
+  OPort0Type otuple ;
+
+  if (_learning)
+  {
+    //LEARNING THE CODEBOOK BACKGROUND
+
+    uint8_t* src_data = (uint8_t *)((img_yuv)->imageData) ;
+
+    for(int c=0; c<_image_len; c++)
+    {
+      updateCodeBook(src_data, _codebook[c]) ;
+      src_data += _num_channels ;
+    }
+
+    time_t now = time(NULL) ;
+
+    if (now - _learning_start_ts > _learning_time)
+    {
+      _learning = false ;
+      SPLLOG(L_INFO, "Learning completed", DBG_ASP) ;
+    }
+    else
+    {
+      SPLLOG(L_DEBUG, "learning for " << _learning_time - (now - _learning_start_ts) << " more seconds", DBG_ASP) ;
+    }
+
+    IplImage* img_out = cvCreateImage(cvSize(<%= $inTupleName %>.get_ipl_width( ),
+                                             <%= $inTupleName %>.get_ipl_height( )),
+                                      IPL_DEPTH_8U, 1) ;
+    
+    if (!img_out)
+    {
+      THROW(SPLRuntimeOperator, "Unable to create image") ;
+    }
+    else
+    {
+      // FIND FOREGROUND
+      
+      cvSet(img_out, cvScalar(0));
+      
+      if (_banner)
+      {
+        char buffer[128] ;
+        snprintf(buffer, 128, "Learning in progress. %ld more seconds to go", _learning_time - (now - _learning_start_ts)) ;
+        cvPutText(img_out, buffer, cvPoint(20, img_in->height - 20), &_font, cvScalarAll(255)) ;
+      }
+      
+      <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+      <%= copy2tuple(undef, "img_out", "otuple") %> ;
+      cvReleaseImage(&img_out) ;
+    }
+  }
+  else
+  {
+    SPLLOG(L_DEBUG, "Detecting foreground", DBG_ASP) ;
+
+    IplImage* img_out = cvCreateImage(cvSize(<%= $inTupleName %>.get_ipl_width( ),
+                                             <%= $inTupleName %>.get_ipl_height( )),
+                                      IPL_DEPTH_8U, 1) ;
+
+    if (!img_out)
+    {
+      THROW(SPLRuntimeOperator, "Unable to create image") ;
+    }
+    else
+    {
+      // FIND FOREGROUND
+
+      uint8_t maskPixelCodeBook;
+      uint8_t* src_data = (uint8_t *)((img_yuv)->imageData) ;
+      uint8_t *dst_data = (uint8_t *)((img_out)->imageData) ;
+
+      for(int c=0; c<_image_len; c++)
+      {
+        maskPixelCodeBook = backgroundDiff(src_data, _codebook[c]);
+        *dst_data = maskPixelCodeBook;
+
+        src_data += _num_channels ;
+        dst_data++ ;
+      }
+
+      <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+      <%= copy2tuple(undef, "img_out", "otuple") %> ;
+      cvReleaseImage(&img_out) ;
+    }
+  }
+
+  cvReleaseImage(&img_in) ;
+  
+  submit(otuple, 0);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  submit(punct, 0) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

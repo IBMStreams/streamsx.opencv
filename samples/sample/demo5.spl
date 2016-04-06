@@ -1,0 +1,46 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012, 2013
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite demo5
+{
+  graph
+    stream<IplImage> vid0 = SourceProxy() {
+      param
+        hostname : "localhost";
+        port : 9000;
+        listen : true;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage, BoxList> faces = FaceDetection(vid0) {
+      param
+        facemodel : getEnvironmentVariable("OPENCV_INSTALL_PATH", "/usr/local") + "/share/OpenCV/haarcascades/haarcascade_frontalface_alt.xml";
+        scale : 2fl;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> final = DrawCircles(faces) {
+      param
+        thickness : 3;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = X11Viewer(final) {
+      param
+        display : "$ENV{DISPLAY}";
+      config
+        placement : partitionColocation("P1");
+    }
+}

@@ -1,0 +1,226 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+#include <format.h>
+#include <opencv.h>
+#include <sys/time.h>
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+my $inTupleName = $model->getInputPortAt(0)->getCppTupleName(); 
+
+my $print_fps = get_param($model, "fps", 1);
+my $print_kbs = get_param($model, "kbs", 1);
+my $print_size = get_param($model, "size", 1);
+my $print_channels = get_param($model, "channels", 1);
+my $print_count = get_param($model, "count", 1);
+my @color = get_param($model, "color", [255]) ;
+SPL::CodeGen::error("parameter 'color' should be a a singleton or triplet") unless $#color == 0 || $#color == 2 ;
+
+%>
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR() :
+  _acc_size(0), _acc_count(0), _last_update(0), _frame_count(0)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  try
+  {
+    cvInitFont(&_font, CV_FONT_HERSHEY_SIMPLEX, 0.5, 0.5, 0.0, 1, CV_AA) ;
+  }
+  catch(cv::Exception& exc)
+  {
+    THROW(SPLRuntimeOperator, "Unable to create font: " << exc) ;
+  }
+
+  _print_fps = (<%= $print_fps %> ? true : false) ;
+  _print_kbs = (<%= $print_kbs %> ? true : false) ;
+  _print_size = (<%= $print_size %> ? true : false) ;
+  _print_channels = (<%= $print_channels %> ? true : false) ;
+  _print_count = (<%= $print_count %> ? true : false) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+uint64_t MY_OPERATOR::getMS( )
+{
+  struct timeval tv ;
+  gettimeofday(&tv, NULL) ;
+
+  return (uint64_t)tv.tv_sec * 1000LL + (uint64_t)tv.tv_usec / 1000 ;
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & tuple, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  IplImage* img = NULL ;
+  const IPort0Type & <%= $inTupleName %> = static_cast<const IPort0Type &>(tuple);
+  <%= copy2img(undef, "$inTupleName", "img") %> ;
+
+  if (!img)
+  {
+    THROW(SPLRuntimeOperator, "Unable to create image") ;
+  }
+
+  _frame_count++ ;
+  _acc_count++ ;
+  _acc_size += <%= $inTupleName %>.getSerializedSize( ) ;
+
+  uint64_t now = getMS( ) ;
+
+  if (!_last_update)
+  {
+    _last_update = now ;
+  }
+  else
+  {
+    if (now - _last_update > 1000)
+    {
+      std::stringstream output ;
+      int output_done = 0 ;
+
+      if (_print_fps)
+      {
+        double fps = _acc_count ;
+        fps = fps / ((double)(now - _last_update) / 1000.0) ;
+        output << dpssupport::format::Format("%.1f fps", fps) ;
+        output_done++ ;
+      }
+
+      if (_print_kbs)
+      {
+        if (output_done)
+        {
+          output << "  " ;
+        }
+
+        double kps = _acc_size ;
+        kps = kps / ((double)(now - _last_update) / 1000.0) ;
+        output << dpssupport::format::Format("%.1f KBs", kps / 1024.0) ;
+        output_done++ ;
+      }
+
+      if (_print_size)
+      {
+        if (output_done)
+        {
+          output << "  " ;
+        }
+
+        output << img->width << "x" << img->height << " pixels"; 
+        output_done++ ;
+      }
+
+      if (_print_channels)
+      {
+        if (output_done)
+        {
+          output << "  " ;
+        }
+
+        output << img->nChannels << " channels" ;
+        output_done++ ;
+      }
+
+      if (_print_count)
+      {
+        if (output_done)
+        {
+          output << "  " ;
+        }
+
+        output << _frame_count << " frames"; // changed for Streams 3.0
+        output_done++ ;
+      }
+
+      _last_output = output.str( ) ;
+      _last_update = now ;
+      _acc_count = 0 ;
+      _acc_size = 0 ;
+
+      SPLLOG(L_DEBUG, "New stat output: " << _last_output, DBG_ASP) ;
+    }
+
+    cvPutText(img, _last_output.c_str( ), cvPoint(20,img->height - 20), &_font,
+              <% if ($#color == 0)
+              { %>
+                cvScalarAll(<%= $color[0] %>)
+                <% }
+              else
+              { %>
+                cvScalarAll(<%= $color[0] %>, <%= $color[1] %>, <%= $color[2] %>, 0)
+                <% }
+              %>
+              ) ;
+  }
+
+  OPort0Type otuple ;
+  <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+  <%= copy2tuple(undef, "img", "otuple") %> ;
+
+  cvReleaseImage(&img) ;
+
+  submit(otuple, 0);
+  
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  submit(punct, 0) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

@@ -1,0 +1,154 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite demo2b
+{
+  graph
+    stream<IplImage> vid0 = CaptureFromFile() {
+      param
+        file : dataDirectory() + "/sample.mpg";
+        repeat : 1;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> bw_vid0 = CvtColor(vid0) {
+      param
+        cvt_param : "CV_BGR2GRAY"; /* Constants for color conversion (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = MJPEGStreamer(bw_vid0) {
+      param
+        httpport : 9001;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> erode_vid0 = Erode(bw_vid0) {
+      param
+        iteration : 4;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> dilate_vid0 = Dilate(erode_vid0) {
+      param
+        iteration : 4;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp2 = MJPEGStreamer(dilate_vid0) {
+      param
+        httpport : 9002;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> smooth_vid0 = Smooth(vid0) {
+      param
+        iteration : 4;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp3 = MJPEGStreamer(smooth_vid0) {
+      param
+        httpport : 9003;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<int32 trackbar_threshold> tb_low = TrackBar() {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+        name : "low";
+        title : "TrackBar";
+        value : 70;
+        max : 255;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<int32 trackbar_threshold> tb_high = TrackBar() {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+        name : "high";
+        title : "TrackBar";
+        value : 175;
+        max : 255;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> th_low_vid0 = Threshold(bw_vid0; tb_low) {
+      param
+        max : 255;
+        threshold_type : "CV_THRESH_TOZERO"; /* Types of thresholding (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> th_high_vid0 = Threshold(bw_vid0; tb_high) {
+      param
+        max : 255;
+        threshold_type : "CV_THRESH_BINARY"; /* Types of thresholding (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> final = Apply2(th_low_vid0; th_high_vid0) {
+      param
+        transform : "cvOr"; /* The CV "in place" function to apply, suitable functions are "cvOr", "cvAnd", "cvAbsDiff", etc. */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp4 = MJPEGStreamer(final) {
+      param
+        httpport : 9004;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> th_low_s_vid0 = Threshold(dilate_vid0; tb_low) {
+      param
+        max : 255;
+        threshold_type : "CV_THRESH_TOZERO"; /* Types of thresholding (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> th_high_s_vid0 = Threshold(dilate_vid0; tb_high) {
+      param
+        max : 255;
+        threshold_type : "CV_THRESH_BINARY"; /* Types of thresholding (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> final_s = Apply2(th_low_s_vid0; th_high_s_vid0) {
+      param
+        transform : "cvOr"; /* The CV "in place" function to apply, suitable functions are "cvOr", "cvAnd", "cvAbsDiff", etc. */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp5 = MJPEGStreamer(final_s) {
+      param
+        httpport : 9005;
+      config
+        placement : partitionColocation("P1");
+    }
+}

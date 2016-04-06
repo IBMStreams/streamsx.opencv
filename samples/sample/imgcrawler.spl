@@ -1,0 +1,47 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite imgcrawler
+{
+  graph
+    stream<IplImage> backgnd = Blank() {
+      param
+        fps : 1;
+        width : 800;
+        height : 600;
+        channels : 3;
+        color : 0bu, 0bu, 0bu;
+    }
+
+    stream<rstring filename> filenames = DirectoryScan() {
+      param
+        directory : "..";
+        pattern : ".*\\.(jpg|jpge|jpe|png|tiff|tif|bmp|dib)";
+    }
+
+    stream<IplImage, tuple<rstring filename>> img0 = ReadImage(filenames) {}
+
+    stream<IplImage, tuple<rstring filename>> cmb0 = CombineImg(backgnd; img0) {
+      param
+        opacity : 50;
+    }
+
+    stream<IplImage> img1 = AddText(cmb0) {
+      param
+        text: filename;
+        size : 0.5fl;
+        forecolor : [ 255, 255, 255 ];
+        backcolor : [ 0, 0, 0 ];
+    }
+
+    () as SinkOp1 = X11Viewer(img1) {}
+}

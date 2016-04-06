@@ -1,0 +1,77 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+
+<%SPL::CodeGen::headerPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $num_ports = $model->getNumberOfInputPorts();
+
+%>
+
+
+class MY_OPERATOR : public MY_BASE_OPERATOR 
+{
+public:
+  // Constructor
+  MY_OPERATOR();
+
+  // Destructor
+  virtual ~MY_OPERATOR(); 
+
+  // Notify port readiness
+  void allPortsReady(); 
+
+  // Notify pending shutdown
+  void prepareToShutdown(); 
+
+  // Processing for source and threaded operators   
+  void process(uint32_t idx);
+    
+  // Tuple processing for non-mutating ports
+  void process(Tuple const & tuple, uint32_t port);
+
+  // Punctuation processing
+  void process(Punctuation const & punct, uint32_t port);
+private:
+  // Members
+  <% for (my $i=0; $i < $num_ports; $i++)
+  { %>
+    typedef <%= $model->getInputPortAt($i)->getCppTupleType() %> ptype_<%= $i %>_t ;
+    typedef std::list<ptype_<%= $i %>_t*> list_<%= $i %>_t; <% }
+  %> ;
+ 
+      int _offset_x ;
+      int _offset_y ;
+      int _opacity ;
+
+      list_0_t _list_0 ;
+      list_1_t _list_1 ;
+      SPL::Mutex _mutex ;
+      SPL::CV _new_image ;
+      bool* _punct_received ;
+
+      const unsigned int _max_list_size ;
+
+      void mergeLoop( ) ;
+
+}; 
+
+<%SPL::CodeGen::headerEpilogue($model);%>
+

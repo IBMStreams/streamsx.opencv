@@ -1,0 +1,97 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+
+#include <stdint.h>
+
+#undef LOG_INFO // conflict with syslog
+#include <opencv/cv.h>
+
+#define MAX_CHANNELS 3
+
+<%SPL::CodeGen::headerPrologue($model);%>
+
+class MY_OPERATOR : public MY_BASE_OPERATOR 
+{
+public:
+  // Constructor
+  MY_OPERATOR();
+
+  // Destructor
+  virtual ~MY_OPERATOR(); 
+
+  // Notify port readiness
+  void allPortsReady(); 
+
+  // Notify pending shutdown
+  void prepareToShutdown(); 
+    
+  // Tuple processing for non-mutating ports
+  void process(Tuple const & tuple, uint32_t port);
+
+  // Punctuation processing
+  void process(Punctuation const & punct, uint32_t port);
+private:
+  // Members
+
+      typedef struct ce
+      {
+        uint8_t learnHigh[MAX_CHANNELS]; // High side threshold for learning
+        uint8_t learnLow[MAX_CHANNELS];  // Low side threshold for learning
+        uint8_t max[MAX_CHANNELS];       // High side of box boundary
+        uint8_t min[MAX_CHANNELS];       // Low side of box boundary
+        int t_last_update;         // This is book keeping to allow us to kill stale entries
+        int stale;                 // max negative run (biggest period of inactivity)
+      } code_element_t ;
+
+      /** PER PIXEL **/
+      typedef struct code_book
+      {
+        code_element_t **cb;
+        int numEntries;
+        int t;                    // count every access
+      } codeBook_t ;
+
+      // This will be our linear model of the image, a vector of lengh
+      // = height*width
+      codeBook_t* _codebook ;
+
+      // Add these (possibly negative) number onto max level when
+      // code_element determining if new pixel is foreground
+      int32_t _max_mod[MAX_CHANNELS] ;
+
+      // Subract these (possible negative) number from min level
+      // code_element when determining if pixel is foreground
+      int32_t _min_mod[MAX_CHANNELS] ;
+
+      // Code Book bounds for learning
+      uint32_t _cb_bounds[MAX_CHANNELS] ;
+
+      // This sets what channels should be adjusted for background bounds
+      bool _adjusted_channels[MAX_CHANNELS] ;
+
+      int32_t _num_channels ;
+      int32_t _image_len ;
+
+      bool _learning ;
+      time_t _learning_start_ts ;
+      time_t _learning_time ;
+      uint64_t _image_count ;
+
+      IplImage* _yuv_image ;
+
+      bool _banner ;
+      CvFont _font ;
+
+      void updateCodeBook(uint8_t *p, codeBook_t &c) ;
+      uint8_t backgroundDiff(uint8_t *p, codeBook_t &c) ;
+}; 
+
+<%SPL::CodeGen::headerEpilogue($model);%>
+
