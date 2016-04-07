@@ -1,6 +1,6 @@
 {
   "name": "Streamsx.opencv",
   "tagline": "(incubation) Toolkit for processing videos in a Streams application",
-  "body": "### OpenCV toolkit for IBM Streams\r\n\r\nPlease see documentation ...",
+  "body": "### OpenCV toolkit for IBM Streams\r\n\r\nThe OpenCV toolkit for IBM Streams allows applications to ingest and process images with the [OpenCV library](http://opencv.org/).\r\n\r\nThe toolkit contains step-by-step instructions for installing the toolkit, the OpenCV library and its dependencies, and for verifying that they are working correctly by executing some of its sample applications. It also contains documentation for the toolkit's operators:\r\n\r\n\r\n",
   "note": "Don't delete this file! It's used internally to help with page regeneration."
 }
