@@ -1,0 +1,26 @@
+# Licensed Materials - Property of IBM
+# Copyright IBM Corp. 2016
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with
+# IBM Corp.
+
+
+DOC_DIR = doc
+
+HTML_FILES = index.html InstallingToolkit.html UsingToolkit.html OperatorsAndTypes.html SampleApplications.html
+
+all: doc
+
+clean:
+	rm -vf $(DOC_DIR)/html/*.html
+
+
+
+doc: $(HTML_FILES)
+	mkdir -p $(DOC_DIR)/html
+	#pandoc --from=markdown_github --to=html5 --output=$here/html/$name.html --standalone $file
+
+
+%.html: %.md
+	echo pandoc --from=markdown_github --to=html5 --output=$(DOC_DIR)/html/$<.html --standalone $(DOC_DIR)/md/$<.md
+
