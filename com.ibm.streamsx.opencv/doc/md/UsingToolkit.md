@@ -7,7 +7,17 @@ If you have a graphical desktop (for example, the Gnome Desktop) on your machine
 
 To use the OpenV toolkit in your own applications, you need to add an SPL ’use’ statement at the beginning of your source code, and specify the directory containing the toolkit when compiling your source code, as shown in 'Use the toolkit with Streams' below.
 
-Verify the toolkit
+set environment variables
+-------------------------
+
+The OpenCV toolkit requires that you set Linux environment variables to identify the directory where the FFmpeg and OpenCV libraries will be installed. You can set them by copying these lines into your ’$HOME/.bashrc’ script:
+
+        export OPENCV_INSTALL_PATH=/usr/local
+        export LD_LIBRARY_PATH=$OPENCV_INSTALL_PATH/lib:$LD_LIBRARY_PATH 
+
+After changing your ’$HOME/.bashrc’ script, you should log off Linux and log back in, to ensure that the new environment variables are set in all shells, including your window manager.
+
+verify the toolkit
 ------------------
 
 If you have access to a graphical desktop on your machine, then you can verify that the OpenCV toolkit is installed properly by running the sample application `file.spl`. This application will open a window on the desktop and replay a short video in it:
@@ -46,7 +56,7 @@ You can verify that operators can be composed and executed on separate threads b
 
 There are many more sample applications included in the toolkit that illustrate how the operators can be used. Each sample application is described in [Sample Applications](SampleApplications.html).
 
-Use the toolkit with Streams
+use the toolkit with Streams
 ----------------------------
 
 All of the operators and types in this toolkit are defined in the Streams namespace ’com.ibm.streamsx.opencv’. To use them in an SPL application, include this statement at the top of your SPL or SPLMM source file:
@@ -93,7 +103,7 @@ Or, if you build your SPL applications in Streams Studio, and you want to import
 
 - select the project `com.ibm.streamsx.opencv‘ and click ’Finish’
 
-Use the toolkit with cameras
+use the toolkit with cameras
 ----------------------------
 
 You can use cameras that are attached directly to your machine with the toolkit.
