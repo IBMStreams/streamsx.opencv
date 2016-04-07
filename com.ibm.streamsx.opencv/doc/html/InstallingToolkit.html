@@ -131,8 +131,9 @@
 <li><a href="https://github.com/IBMStreams/streamsx.opencv">https://github.com/IBMStreams/streamsx.opencv</a></li>
 </ul>
 <p>After downloading the OpenCV toolkit package you must unpack it and build its library and sample applications. You can do this by entering these commands at a Linux prompt:</p>
-<pre><code>    tar -xvf streamsx.network-master.zip
-    cd streamsx.opencv               
+<pre><code>    unzip streamsx.opencv-master.zip
+    mv streamsx.opencv-master streamsx.opencv               
+    cd streamsx.opencv
     make</code></pre>
 <p>After building the toolkit’s sample applications, you should execute some of them to verify that the operators work properly on your machine. For instructions on doing this, see <a href="UsingToolkit.html">Using the OpenCV Toolkit</a>.</p>
 <p>The OpenCV toolkit documentation is available in 'markdown' and HTML formats in these directories:</p>

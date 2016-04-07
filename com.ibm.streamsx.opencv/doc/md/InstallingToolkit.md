@@ -173,8 +173,9 @@ You can download a package containing the OpenCV toolkit from:
 
 After downloading the OpenCV toolkit package you must unpack it and build its library and sample applications. You can do this by entering these commands at a Linux prompt:
 
-        tar -xvf streamsx.network-master.zip
-        cd streamsx.opencv               
+        unzip streamsx.opencv-master.zip
+        mv streamsx.opencv-master streamsx.opencv               
+        cd streamsx.opencv
         make
 
 After building the toolkit’s sample applications, you should execute some of them to verify that the operators work properly on your machine. For instructions on doing this, see [Using the OpenCV Toolkit](UsingToolkit.html).
