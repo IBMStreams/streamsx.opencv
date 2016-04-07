@@ -1,11 +1,8 @@
 OpenCV Toolkit for IBM Streams
 ==============================
 
-The OpenCV Toolkit for IBM Streams is a collection of operators for processing video streams.  The operators are built on many software libraries, primarily from these ’open source’ projects:
 
-- [OpenCV (Open Computer Vision)](http://opencv.org/)
-
-- [FFmpeg (Fast Forward MPEG)](http://ffmpeg.org/)
+The OpenCV toolkit for IBM Streams allows applications to ingest and process images with the [OpenCV (Open Computer Vision)](http://opencv.org/) library.
 
 For instructions on obtaining and installing the toolkit and its dependencies, see [Installing the OpenCV Toolkit](InstallingToolkit.html).
 
