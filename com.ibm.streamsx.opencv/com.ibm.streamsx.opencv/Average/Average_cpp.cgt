@@ -1,0 +1,153 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+my $inTupleName = $model->getInputPortAt(0)->getCppTupleName(); 
+
+%>
+
+#undef LOG_INFO // conflict with syslog
+#include <opencv.h>
+
+using namespace std;
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR()
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  try
+  {
+    cvInitFont(&_font, CV_FONT_HERSHEY_SIMPLEX, 1.0, 1.0, 0.0, 2, CV_AA) ;
+  }
+  catch(cv::Exception& exc)
+  {
+    THROW(SPLRuntimeOperator, "Unable to create font: " << exc) ;
+  }
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & tuple, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  IplImage* img_in = NULL ;
+
+  const IPort0Type & <%= $inTupleName %> = static_cast<const IPort0Type &>(tuple);
+  <%= copy2img(undef, "$inTupleName", "img_in") %> ;
+
+  if (!img_in)
+  {
+    THROW(SPLRuntimeOperator, "Unable to create image") ;
+  }
+  else
+  {
+    IplImage* img_bw = NULL ;
+
+    if (<%= $inTupleName %>.get_ipl_channels( ) == 1)
+    {
+      img_bw = img_in ;
+    }
+    else
+    {
+      img_bw = cvCreateImage(cvSize(<%= $inTupleName %>.get_ipl_width( ),
+                                    <%= $inTupleName %>.get_ipl_height( )),
+                             <%= $inTupleName %>.get_ipl_depth( ),
+                             1) ;
+
+      cvCvtColor(img_in, img_bw, CV_BGR2GRAY) ;
+    }
+
+    double pixel_sum = 0 ;
+    
+    for(int y=0; y<img_bw->height; y++)
+    {
+      uint8_t* data = (uint8_t*)img_bw->imageData + (y * img_bw->widthStep) ;
+      
+      for(int x=0; x<img_bw->width; x++)
+      {
+        pixel_sum += (double) data[x] ;
+      }
+    }
+
+    if (img_bw != img_in)
+    {
+      cvReleaseImage(&img_bw) ;
+    }
+    
+    char buffer[128] ;
+    snprintf(buffer, 128, "avg=%.1f", pixel_sum / (double)(img_in->width * img_in->height)) ;
+    cvPutText(img_in, buffer, cvPoint(20,40), &_font, cvScalarAll(0)) ;
+    
+    OPort0Type otuple ;
+    <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+    <%= copy2tuple(undef, "img_in", "otuple") %> ;
+    
+    submit(otuple, 0);
+
+    cvReleaseImage(&img_in) ;
+  }
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  submit(punct, 0) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

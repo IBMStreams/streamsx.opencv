@@ -1,0 +1,82 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite onc4
+{
+  graph
+    stream<IplImage> vid0 = CaptureFromCAM() {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> skip_empty = SkipEmpty(vid0) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> pacer = FramePacer(skip_empty) {
+      param
+        file : dataDirectory() + "/sample.mpg";
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> vid2 = CvtColor(vid0) {
+      param
+        cvt_param : "CV_BGR2GRAY"; /* Constants for color conversion (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<int32 trackbar_threshold> tb_high = TrackBar() {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+        name : "high";
+        title : "TrackBar";
+        value : 214;
+        max : 255;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> th_high_vid0 = Threshold(vid2; tb_high) {
+      param
+        max : 255;
+        threshold_type : "CV_THRESH_TOZERO_INV"; /* Types of thresholding (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> cc = ConnectedComponents(th_high_vid0) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> cntr = DrawContours(cc) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = MJPEGStreamer(th_high_vid0) {
+      param
+        httpport : 9001;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp2 = MJPEGStreamer(cntr) {
+      param
+        httpport : 9002;
+      config
+        placement : partitionColocation("P2");
+    }
+}

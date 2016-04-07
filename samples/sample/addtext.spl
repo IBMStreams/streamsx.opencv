@@ -1,0 +1,58 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012, 2013
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite addtext
+{
+  graph
+    stream<IplImage> video0 = CaptureFromFile() {
+    param file : dataDirectory() + "/sample_faces5.mpg"; }
+    
+    stream<IplImage, tuple<rstring label>> video1 as Out= Functor(video0) {
+    output Out: label = (rstring)ipl_width + "x" + (rstring)ipl_height + " pixels"; }
+
+    stream<IplImage> video2 = AddText(video1) {
+    param
+       text: label;
+       forecolor  : [ 0, 0, 255 ];
+       backcolor  : [ 0, 255,0 ];
+       size       : 2.0; }
+
+    stream<int32 f, int32 w, int32 h, list<uint8> d> video3 as Out = Functor(video2 as In) {
+    logic state: mutable int32 frame = 0;
+    onTuple In: frame++;
+    output Out: 
+         f = frame,
+         w = ipl_width,
+         h = ipl_height,
+         d = ipl_data; }
+
+     stream<rstring t, int32 w, int32 h, list<uint8> d>video4 = AddText(video3 as In) {
+     logic state: { mutable rstring label; }
+     onTuple In: { label = "frame number: " + (rstring)f + "\n" + "image size: " + (rstring)w + "x" + (rstring)h + " pixels"; }
+     param
+       forecolor  : [ 255, 255, 0 ];
+       x          : 50; 
+       y          : -90;
+       text: label; 
+       widthAttribute: w;
+       heightAttribute: h;
+       dataAttribute: d; }
+
+
+    () as SinkOp1 = X11Viewer(video4) {
+    param
+       display : getEnvironmentVariable("DISPLAY"); 
+       widthAttribute: w;
+       heightAttribute: h;
+       dataAttribute: d; }
+
+}

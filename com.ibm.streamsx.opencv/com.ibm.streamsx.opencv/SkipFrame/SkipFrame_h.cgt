@@ -1,0 +1,70 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+
+<%SPL::CodeGen::headerPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $style = get_param($model, "style", undef);
+
+SPL::CodeGen::error("'style' $style must be 'adaptive' or 'fixed'\n") unless $style == "adaptive" || $style == "fixed" ;
+
+%>
+
+class MY_OPERATOR : public MY_BASE_OPERATOR 
+{
+public:
+
+  // Constructor
+  MY_OPERATOR();
+
+  // Destructor
+  virtual ~MY_OPERATOR(); 
+
+  // Notify port readiness
+  void allPortsReady(); 
+
+  // Notify pending shutdown
+  void prepareToShutdown(); 
+
+  // Processing for source and threaded operators   
+  void process(uint32_t idx);
+    
+  // Tuple processing for non-mutating ports
+  void process(Tuple const & tuple, uint32_t port);
+
+  // Punctuation processing
+  void process(Punctuation const & punct, uint32_t port);
+private:
+  // Members
+      int _skip_frame ;
+      uint64_t _image_count ;
+      uint64_t _image_skipped ;
+      OPort0Type* _otuple ;
+
+      <% if ($style == "adaptive") { %>
+        SPL::Mutex _mutex ;
+        SPL::CV _new_image ;
+      <% } %> ;
+
+      void sendLoop( ) ;
+}; 
+
+<%SPL::CodeGen::headerEpilogue($model);%>
+

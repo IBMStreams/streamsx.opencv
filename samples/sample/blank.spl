@@ -1,0 +1,38 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012, 2013
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite blank
+{
+  graph
+    stream<IplImage> blank0 = Blank() {
+      param
+        width : 640;
+        height : 480;
+        fps : 1000;
+        channels : 3;
+        color : 127bu, 191bu, 127bu;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> vid0 = Stats(blank0) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = MJPEGStreamer(vid0) {
+      param
+        httpport : 9001;
+      config
+        placement : partitionColocation("P1");
+    }
+}

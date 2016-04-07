@@ -1,0 +1,40 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+composite crawler
+{
+  graph
+    stream<rstring filename> file0 = DirectoryScan() {
+      param
+        directory : "..";
+    }
+
+    () as SinkOp1 = FileSink(file0) {
+      param
+        file : "output-a.out";
+        flush : 1u;
+        writePunctuations : true;
+        format : txt;
+    }
+
+    stream<rstring filename> file2 = DirectoryScan() {
+      param
+        directory : "../../com.ibm.streams.opencv/Flip";
+        pattern : ".*\\.(xml|cgt)";
+    }
+
+    () as SinkOp3 = FileSink(file2) {
+      param
+        file : "output-f.out";
+        flush : 1u;
+        writePunctuations : true;
+        format : txt;
+    }
+}

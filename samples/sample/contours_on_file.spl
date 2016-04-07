@@ -1,0 +1,81 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012, 2013
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite contours_on_file
+{
+  graph
+    stream<IplImage> vid0 = CaptureFromFile() {
+      param
+        file : dataDirectory() + "/sample_contour3.mpg";
+        repeat : 1;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> bw_vid0 = CvtColor(vid0) {
+      param
+        cvt_param : "CV_BGR2GRAY"; /* Constants for color conversion (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> smooth_bw_vid0 = Smooth(bw_vid0) {
+      param
+       iteration : 1;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> th_vid0 = Threshold(smooth_bw_vid0) {
+      param
+        max            : 255;
+        threshold      : 75;
+        threshold_type : "CV_THRESH_TOZERO"; /* Types of thresholding (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> cntr = DrawContours(th_vid0) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> cntr_rgb = CvtColor(cntr) {
+      param
+       channels  : 3;
+       cvt_param : "CV_GRAY2BGR"; /* Constants for color conversion (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> src_n_cntr = Collage(vid0; cntr_rgb) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = X11Viewer(src_n_cntr) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp2 = SaveToFile(src_n_cntr) {
+      param
+        filename : dataDirectory() + "/contours_on_file-out.avi";
+        frate    : dataDirectory() + "/sample_contour3.mpg";
+      fourcc   : "mjpg";
+      config
+        placement : partitionColocation("P1");
+    }
+
+}

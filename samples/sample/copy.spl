@@ -1,0 +1,38 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012, 2013
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite copy
+{
+  graph
+    stream<IplImage> vid0 = CaptureFromFile() {
+      param
+        file : dataDirectory() + "/sample_faces5.mpg";
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = X11Viewer(vid0) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp2 = SaveToFile(vid0) {
+      param
+        filename : dataDirectory() + "/copy-out.avi";
+        frate : dataDirectory() + "/sample_faces5.mpg";
+        fourcc : "mjpg";
+      config
+        placement : partitionColocation("P1");
+    }
+}

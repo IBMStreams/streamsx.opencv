@@ -1,0 +1,29 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012, 2013
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite cam_proxy
+{
+  graph
+    stream<IplImage> cam = CaptureFromCAM() {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOpOrigin = DisplayProxy(cam) {
+      param
+        port : 9001;
+      listen: true;
+        compress : true;
+      config
+        placement : partitionColocation("P1");
+    }   
+}

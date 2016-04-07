@@ -1,0 +1,62 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012, 2013
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite draw_contours_on_url
+ {
+  graph
+    stream<IplImage> cam0 = CaptureFromURL() {
+      param
+        url: "http://207.251.86.238/cctv303.jpg"; // NYC, Lex at 42nd, from http://nyctmc.org
+        rate : 15;
+        dieonerror : 0;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> bw_cam0 = CvtColor(cam0) {
+      param
+        cvt_param : "CV_RGB2GRAY"; /* Constants for color conversion (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> smth_cam0 = Smooth(bw_cam0) {
+      param
+        iteration : 4;
+    }
+
+    stream<IplImage> th_cam0 = Threshold(smth_cam0) {
+      param
+        threshold : 128;
+        max : 255;
+        threshold_type : "CV_THRESH_TOZERO_INV"; /* Types of thresholding (cv.h) (quoted) */
+    }
+
+    stream<IplImage> cntr = DrawContours(th_cam0) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> img = Apply2(cntr; bw_cam0) {
+      param
+        transform : "cvOr"; /* The CV "in place" function to apply, suitable functions are "cvOr", "cvAnd", "cvAbsDiff", etc. */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = X11Viewer(img) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+      config
+        placement : partitionColocation("P1");
+    }
+}

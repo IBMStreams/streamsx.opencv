@@ -1,0 +1,45 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012, 2013
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite xcombine
+{
+  graph
+    stream<IplImage> vid0 = CaptureFromFile() {
+      param
+        file : dataDirectory() + "/sample_faces5.mpg";
+        repeat : 1;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> vid2 = Resize(vid0) {
+      param
+        percent : 130;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> vid3 = CombineImg(vid0; vid2) {
+      param
+        offset : 100, 0;
+        opacity : 30;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = X11Viewer(vid3) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+      config
+        placement : partitionColocation("P1");
+    }
+}

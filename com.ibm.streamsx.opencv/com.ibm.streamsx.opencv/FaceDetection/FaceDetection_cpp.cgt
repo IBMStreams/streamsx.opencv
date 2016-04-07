@@ -1,0 +1,145 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+#include <opencv.h>
+#include <sys/time.h>
+#include <hpa_time.h>
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+
+my $scale = get_param($model, "scale", 1);
+
+%>
+
+using namespace std;
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR()
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  _scale = <%= $scale %> ;
+
+  string facemodel(<%=$model->getParameterByName("facemodel")->getValueAt(0)->getCppExpression()%>) ;
+  SPLLOG(L_DEBUG, "loading face model from file " + facemodel, DBG_ASP);
+
+  if ( ! _cascade.load(facemodel) ) { 
+    THROW(SPLRuntimeOperator, "Unable to load facemodel from file " << facemodel) ;
+  }
+
+  SPLLOG(L_INFO, "loaded face model from file " << facemodel, DBG_ASP) ;
+
+  _storage = cvCreateMemStorage(0);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  cvReleaseMemStorage(&_storage) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & tuple, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  IplImage* img = NULL ;
+  IplImage* gray = NULL ;
+  IplImage* small_img = NULL ;
+
+  const IPort0Type & iport$0 = static_cast<const IPort0Type &>(tuple);
+  <%= copy2img(undef, "iport\$0", "img") %> ;
+
+  gray = cvCreateImage(cvSize(img->width,img->height), 8, 1) ;
+  small_img = cvCreateImage(cvSize(cvRound (img->width / _scale),
+                                   cvRound (img->height / _scale)), 8, 1) ;
+
+  if (!img || !gray || !small_img) {
+    THROW(SPLRuntimeOperator, "Unable to create images") ;
+  }
+
+  cvCvtColor(img, gray, CV_BGR2GRAY) ;
+  cvResize(gray, small_img, CV_INTER_LINEAR) ;
+  cvEqualizeHist(small_img, small_img) ;
+  cvClearMemStorage(_storage) ;
+
+  cv::Mat small_mat = cv::cvarrToMat(small_img);
+  std::vector<cv::Rect> faces;
+  int flags = CV_HAAR_DO_CANNY_PRUNING;
+  _cascade.detectMultiScale( small_mat, faces, 1.1, 2, flags, cv::Size(60, 60) );
+
+  OPort0Type otuple ;
+  <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+  <%= copy2tuple(undef, "img", "otuple") %> ;
+
+  for(int i = 0; i<faces.size(); i++ ) {
+    otuple.get_x_list().push_back( (uint32_t)( faces[i].x * _scale ) ) ;
+    otuple.get_y_list().push_back( (uint32_t)( faces[i].y * _scale ) ) ;
+    otuple.get_width_list().push_back( (uint32_t)( faces[i].width * _scale ) ) ;
+    otuple.get_height_list().push_back( (uint32_t)( faces[i].height * _scale ) ) ;
+  }
+
+  cvReleaseImage(&gray) ;
+  cvReleaseImage(&small_img) ;
+  cvReleaseImage(&img) ;
+
+  submit(otuple, 0);
+  
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  submit(punct, 0) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

@@ -1,0 +1,198 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012, 2013
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* 
+
+This operator is based on the OpenCV function 'cvSaveImage()', which is documented here:
+
+    http://docs.opencv.org/modules/highgui/doc/reading_and_writing_images_and_video.html
+
+In particular, the valid values for the file extension that determines the imge format are
+defined on that page under the 'imread()' function.
+*/
+
+/* Additional includes go here */
+#undef LOG_INFO // conflict with syslog
+#include <opencv.h>
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+
+my $inputPort = $model->getInputPortAt(0);
+
+my $outputPort = $model->getNumberOfOutputPorts>0 ?  $model->getOutputPortAt(0) : undef;
+
+my $file = $model->getParameterByName("file")->getValueAt(0)->getCppExpression();
+
+my $increment = $model->getParameterByName("increment") ? $model->getParameterByName("increment")->getValueAt(0)->getCppExpression() : 0;
+
+my $widthAttribute = "";
+$widthAttribute = "iport\$0.get_ipl_width()" if $model->getInputPortAt(0)->getAttributeByName("ipl_width");
+$widthAttribute = $model->getParameterByName("widthAttribute")->getValueAt(0)->getCppExpression() if $model->getParameterByName("widthAttribute");
+SPL::CodeGen::error("image width not specified by parameter or input attribute") unless $widthAttribute;
+#print STDERR "widthAttribute=$widthAttribute\n";
+
+my $heightAttribute = "";
+$heightAttribute = "iport\$0.get_ipl_height()" if $model->getInputPortAt(0)->getAttributeByName("ipl_height");
+$heightAttribute = $model->getParameterByName("heightAttribute")->getValueAt(0)->getCppExpression() if $model->getParameterByName("heightAttribute");
+SPL::CodeGen::error("image height not specified by parameter or input attribute") unless $heightAttribute;
+#print STDERR "heightAttribute=$heightAttribute\n";
+
+my $depthAttribute = "8";
+$depthAttribute = "iport\$0.get_ipl_depth()" if $model->getInputPortAt(0)->getAttributeByName("ipl_depth");
+$depthAttribute = $model->getParameterByName("depthAttribute")->getValueAt(0)->getCppExpression() if $model->getParameterByName("depthAttribute");
+#print STDERR "depthAttribute=$depthAttribute\n";
+
+my $channelsAttribute = "3";
+$channelsAttribute = "iport\$0.get_ipl_channels()" if $model->getInputPortAt(0)->getAttributeByName("ipl_channels");
+$channelsAttribute = $model->getParameterByName("channelsAttribute")->getValueAt(0)->getCppExpression() if $model->getParameterByName("channelsAttribute");
+#print STDERR "channelsAttribute=$channelsAttribute\n";
+
+my $dataAttribute = "";
+$dataAttribute = "iport\$0.get_ipl_data()" if $model->getInputPortAt(0)->getAttributeByName("ipl_data");
+$dataAttribute = $model->getParameterByName("dataAttribute")->getValueAt(0)->getCppExpression() if $model->getParameterByName("dataAttribute");
+SPL::CodeGen::error("image data not specified by parameter or input attribute") unless $dataAttribute;
+#print STDERR "dataAttribute=$dataAttribute\n";
+
+my $dataAttributeType = "";
+$dataAttributeType = $model->getInputPortAt(0)->getAttributeByName("ipl_data")->getSPLType() if $model->getInputPortAt(0)->getAttributeByName("ipl_data");
+$dataAttributeType = $model->getParameterByName("dataAttribute")->getValueAt(0)->getSPLType() if $model->getParameterByName("dataAttribute");
+SPL::CodeGen::error("image data type not 'list<uint8>") unless $dataAttributeType eq "list<uint8>";
+#print STDERR "dataAttributeType=$dataAttributeType\n";
+
+%>
+
+#define DBG_ASP "opencv"
+
+using namespace std;
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR()
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  inc_value = 0;
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+// Processing for source and threaded operators   
+void MY_OPERATOR::process(uint32_t idx)
+{
+}
+
+// Tuple processing for mutating ports 
+void MY_OPERATOR::process(Tuple & tuple, uint32_t port)
+{
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & inTuple, uint32_t port)
+{
+  SPLLOG(L_TRACE, "entering " <%=qt($opername."::process") %>, DBG_ASP) ;
+      
+  // get the values of the parameters
+  const IPort0Type& iport$0 = static_cast<const IPort0Type &>(inTuple);
+  std::string file = <%=$file%>;
+  const int increment = <%=$increment%>;
+  const int width = <%=$widthAttribute%>;
+  const int height = <%=$heightAttribute%>;
+  const int depth = <%=$depthAttribute%>;
+  const int channels = <%=$channelsAttribute%>;
+  const SPL::list<SPL::uint8> data = <%=$dataAttribute%>;
+
+  // basic safety checks
+  if (depth!=IPL_DEPTH_8U) { THROW(SPLRuntimeOperator, "Unsupported image depth: " << IPL_DEPTH2STR(depth)); }
+  const int imgSize = width * height * channels;
+  const int dataLength = <%=$dataAttribute%>.getSize();
+  if (imgSize!=dataLength) { THROW(SPLRuntimeOperator, "image data size does not equal width*height*channels, " << imgSize << " != " << dataLength); }
+  const int dot = file.find_last_of('.');
+  if (dot==std::string::npos) { THROW(SPLRuntimeOperator, "no extension found in filename '" << file << "'"); }
+
+  // create an OpenCV image header
+  IplImage* img = cvCreateImage(cvSize(width, height), depth, channels);
+  if (!img) { THROW(SPLRuntimeOperator, "Unable to create image"); }
+
+  // copy the data from the tuple into the OpenCV image buffer
+  uint8_t* srcPointer = (uint8_t*)(&data[0]);
+  uint8_t* dstPointer = (uint8_t*)(img->imageData);
+  for(int y=0; y<img->height; y++) {
+      memcpy(dstPointer, srcPointer, img->width * img->nChannels);
+      srcPointer += img->width * (img)->nChannels;
+      dstPointer += img->widthStep; }
+
+  // if the 'increment' parameter was specified and is true, insert a 
+  // sequence number in front of the filename extension 
+  if (increment) {
+	   std::ostringstream s;
+  	   s << "_" << inc_value++;
+	   file.insert(dot, s.str()); } 
+
+  // write the image into the specified file  
+  cvSaveImage(file.c_str(), img);
+
+  <% if ($outputPort) { %>
+  // submit a tuple containing the name of the file the image was written into
+  OPort0Type outTuple(static_cast<SPL::rstring>(file));
+  submit(outTuple, 0);
+  <% } %>
+
+  // release the OpenCV image header
+  cvReleaseImage(&img) ;
+}
+
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  <% if ($outputPort) { %>
+  submit(punct, 0);
+  <% } %>
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

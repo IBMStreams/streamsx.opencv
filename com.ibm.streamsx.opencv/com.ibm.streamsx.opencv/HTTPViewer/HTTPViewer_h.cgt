@@ -1,0 +1,47 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+#include <http.h>
+
+<%SPL::CodeGen::headerPrologue($model);%>
+
+class MY_OPERATOR : public MY_BASE_OPERATOR 
+{
+public:
+  // Constructor
+  MY_OPERATOR();
+
+  // Destructor
+  virtual ~MY_OPERATOR(); 
+
+  // Notify port readiness
+  void allPortsReady(); 
+
+  // Notify pending shutdown
+  void prepareToShutdown(); 
+
+  // Tuple processing for non-mutating ports
+  void process(Tuple const & tuple, uint32_t port);
+
+private:
+  // Members
+      uint64_t _image_count ;
+      IplImage* _image ;
+      SPL::Mutex _mutex ;
+      dpssupport::http::HttpServer _http_server ;
+
+      void displayPicture(struct MHD_Connection* connection,
+                          const char* url,
+                          const char* method,
+                          void* data) ;
+
+}; 
+
+<%SPL::CodeGen::headerEpilogue($model);%>
+

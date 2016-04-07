@@ -1,0 +1,77 @@
+<?xml version="1.0" ?>
+<!--                                                             -->
+<!-- Licensed Materials - Property of IBM                        -->
+<!-- Copyright IBM Corp. 2012                                    -->
+<!-- US Government Users Restricted Rights - Use, duplication or -->
+<!-- disclosure restricted by GSA ADP Schedule Contract with     -->
+<!-- IBM Corp.                                                   -->
+<!--                                                             -->
+<operatorModel
+  xmlns="http://www.ibm.com/xmlns/prod/streams/spl/operator" 
+  xmlns:cmn="http://www.ibm.com/xmlns/prod/streams/spl/common" 
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.ibm.com/xmlns/prod/streams/spl/operator operatorModel.xsd">
+  <cppOperatorModel>
+    <context>
+      <libraryDependencies>
+        <library>
+          <cmn:description>Required libraries</cmn:description>
+          <cmn:managedLibrary>
+            <cmn:command>../Common/LibInfo.pl</cmn:command>
+          </cmn:managedLibrary>
+        </library>
+      </libraryDependencies>
+      <providesSingleThreadedContext>Never</providesSingleThreadedContext>
+    </context>  
+    <parameters>
+      <allowAny>false</allowAny>
+      <parameter>
+        <name>threshold1</name>
+        <description>Specify threshold1 value for cvCanny if trackbar is not used, default use TrackBar value</description>
+        <optional>true</optional>
+        <rewriteAllowed>false</rewriteAllowed>
+        <expressionMode>AttributeFree</expressionMode>
+        <type>int32</type>
+        <cardinality>1</cardinality>
+      </parameter>
+      <parameter>
+        <name>threshold2</name>
+        <description>Specify threshold2 value relative to threshold1 value for cvCanny if trackbar is not used, default use TrackBar value.  e.g. if threshold values are (10, 20) then parameters should be (10, 10).</description>
+        <optional>true</optional>
+        <rewriteAllowed>false</rewriteAllowed>
+        <expressionMode>AttributeFree</expressionMode>
+        <type>int32</type>
+        <cardinality>1</cardinality>
+      </parameter>
+      <parameter>
+        <name>aperture</name>
+        <description>aperture size for cvCanny, default 3</description>
+        <optional>true</optional>
+        <rewriteAllowed>false</rewriteAllowed>
+        <expressionMode>AttributeFree</expressionMode>
+        <type>int32</type>
+        <cardinality>1</cardinality>
+      </parameter>
+    </parameters>
+    <inputPorts>
+      <inputPortOpenSet>
+        <tupleMutationAllowed>true</tupleMutationAllowed>
+        <windowingMode>OptionallyWindowed</windowingMode>
+        <windowPunctuationInputMode>WindowBound</windowPunctuationInputMode>
+      </inputPortOpenSet>
+    </inputPorts>
+    <outputPorts>
+      <outputPortSet>
+        <expressionMode>Expression</expressionMode> 
+        <autoAssignment>true</autoAssignment>
+        <completeAssignment>false</completeAssignment>
+        <rewriteAllowed>false</rewriteAllowed>
+        <windowPunctuationOutputMode>Preserving</windowPunctuationOutputMode>
+        <windowPunctuationInputPort>0</windowPunctuationInputPort>
+        <tupleMutationAllowed>true</tupleMutationAllowed>
+        <cardinality>1</cardinality>
+        <optional>false</optional>
+      </outputPortSet>          
+    </outputPorts>
+  </cppOperatorModel>
+</operatorModel>

@@ -1,0 +1,312 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+#include <opencv.h>
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+my $inTupleName = $model->getInputPortAt(0)->getCppTupleName(); 
+
+my $radius = get_param($model, "radius", 3);
+my $mode = get_param($model, "mode", "median");
+
+SPL::CodeGen::error("mode must be {min,med(ian),max}") unless $mode == "min" || $mode == "median" || $mode == "med" || $mode == "max" ;
+
+%>
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR()
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+#define PXL(img, x, y) (((uint8_t*)(img)->imageData + ((y) * (img)->widthStep))[x])
+#define SQ(x) ((x)*(x))
+
+void MY_OPERATOR::doRankFilterMin(IplImage* img_in, IplImage* img_out)
+{
+  const int radius = <%= $radius %> ;
+  for(int y=0; y<img_in->height; y++)
+  {
+    for(int x=0; x<img_in->width; x++)
+    {
+      uint8_t min_value = 255 ;
+
+      for(int xx=x-radius; xx <= x+radius; xx++)
+      {
+        for(int yy=y-radius; yy <= y+radius; yy++)
+        {
+          if ((xx >= 0 && xx < img_in->width) &&
+              (yy >= 0 && yy < img_in->height))
+          {
+            uint8_t v = PXL(img_in, xx, yy) ;
+
+            if (v < min_value)
+            {
+              min_value = v ;
+            }
+          }
+        }
+      }
+
+      PXL(img_out, x, y) = min_value ;
+    }
+  }
+}
+
+void MY_OPERATOR::doRankFilterMed(IplImage* img_in, IplImage* img_out)
+{
+  const int radius = <%= $radius %> ;
+  uint8_t values[256] ;
+
+  for(int y=0; y<img_in->height; y++)
+  {
+    for(int x=0; x<img_in->width; x++)
+    {
+      for(int i=0; i < 256; i++)
+      {
+        values[i] = 0 ;
+      }
+
+      int count = 0 ;
+
+      for(int xx=x-radius; xx <= x+radius; xx++)
+      {
+        for(int yy=y-radius; yy <= y+radius; yy++)
+        {
+          if ((xx >= 0 && xx < img_in->width) &&
+              (yy >= 0 && yy < img_in->height))
+          {
+            uint8_t v = PXL(img_in, xx, yy) ;
+            values[v]++ ;
+            count++ ;
+          }
+        }
+      }
+
+      count = (count / 2) + 1 ;
+      uint8_t final = 0 ;
+
+      for(int i=0; i < 256; i++)
+      {
+        count -= values[i] ;
+
+        if (count <= 0)
+        {
+          final = i ;
+          break ;
+        }
+      }
+
+      PXL(img_out, x, y) = final ;
+    }
+  }
+}
+
+void MY_OPERATOR::doRankFilterMax(IplImage* img_in, IplImage* img_out)
+{
+  const int radius = <%= $radius %> ;
+
+  for(int y=0; y<img_in->height; y++)
+  {
+    for(int x=0; x<img_in->width; x++)
+    {
+      uint8_t max_value = 0 ;
+
+      for(int xx=x-radius; xx <= x+radius; xx++)
+      {
+        for(int yy=y-radius; yy <= y+radius; yy++)
+        {
+          if ((xx >= 0 && xx < img_in->width) &&
+              (yy >= 0 && yy < img_in->height))
+          {
+            uint8_t v = PXL(img_in, xx, yy) ;
+
+            if (v > max_value)
+            {
+              max_value = v ;
+            }
+          }
+        }
+      }
+
+      PXL(img_out, x, y) = max_value ;
+    }
+  }
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & tuple, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  IplImage* img_in = NULL ;
+  const IPort0Type & <%= $inTupleName %> = static_cast<const IPort0Type &>(tuple);
+  <%= copy2img(undef, "$inTupleName", "img_in") %> ;
+
+  if (!img_in)
+  {
+    THROW(SPLRuntimeOperator, "Unable to create image") ;
+  }
+
+  if (img_in->nChannels == 1)
+  {
+    IplImage* img_out = cvCreateImage(cvSize(img_in->width, img_in->height),
+                                      img_in->depth, 1) ;
+
+    if (!img_out)
+    {
+      THROW(SPLRuntimeOperator, "Unable to create image") ;
+    }
+
+    <% if ($mode == "min")
+    { %>
+
+      doRankFilterMin(img_in, img_out) ;
+
+      <% }
+    elsif ($mode == "median" || $mode == "med")
+    { %>
+
+      doRankFilterMed(img_in, img_out) ;
+
+      <% }
+    elsif ($mode == "max")
+    { %>
+
+      doRankFilterMax(img_in, img_out) ;
+
+      <% }
+    else
+    {
+        die "Impossible" ;
+    } %> ;
+
+    cvReleaseImage(&img_in) ;
+    img_in = img_out ;
+  }
+  else
+  {
+    IplImage* img_in_ch[4] = {NULL, NULL, NULL, NULL} ;
+    IplImage* img_out_ch[4] = {NULL, NULL, NULL, NULL} ;
+
+    for(int c=0 ;c < img_in->nChannels; c++)
+    {
+      img_in_ch[c] = cvCreateImage(cvSize(img_in->width, img_in->height),
+                                   img_in->depth, 1) ;
+
+      img_out_ch[c] = cvCreateImage(cvSize(img_in->width, img_in->height),
+                                    img_in->depth, 1) ;
+
+      if (!img_in_ch[c] || !img_out_ch[c])
+      {
+        THROW(SPLRuntimeOperator, "Unable to create images") ;
+      }
+    }
+
+    cvSplit(img_in, img_in_ch[0], img_in_ch[1], img_in_ch[2], img_in_ch[3]) ;
+
+    for(int c=0 ;c < img_in->nChannels; c++)
+    {
+      <% if ($mode == "min")
+      { %>
+
+        doRankFilterMin(img_in_ch[c], img_out_ch[c]) ;
+
+        <% }
+      elsif ($mode == "median" || $mode == "med")
+      { %>
+
+        doRankFilterMed(img_in_ch[c], img_out_ch[c]) ;
+
+        <% }
+      elsif ($mode == "max")
+      { %>
+
+        doRankFilterMax(img_in_ch[c], img_out_ch[c]) ;
+
+        <% }
+      else
+      {
+          die "Impossible" ;
+      } %> ;
+    }
+
+    cvMerge(img_out_ch[0], img_out_ch[1], img_out_ch[2], img_out_ch[3], img_in) ;
+
+    for(int c=0 ;c < img_in->nChannels; c++)
+    {
+      cvReleaseImage(&img_in_ch[c]) ;
+      cvReleaseImage(&img_out_ch[c]) ;
+    }
+  }
+
+  OPort0Type otuple ;
+  <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+  <%= copy2tuple(undef, "img_in", "otuple") %> ;
+
+  cvReleaseImage(&img_in) ;
+
+  submit(otuple, 0);
+  
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  submit(punct, 0) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

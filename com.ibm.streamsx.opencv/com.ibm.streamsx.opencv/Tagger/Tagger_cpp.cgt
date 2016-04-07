@@ -1,0 +1,97 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+#include <opencv.h>
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+my $inTupleName = $model->getInputPortAt(0)->getCppTupleName(); 
+
+%>
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR() :
+  _tag(0)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & tuple, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  const IPort0Type & <%= $inTupleName %> = static_cast<const IPort0Type &>(tuple);
+  OPort0Type otuple ;
+  <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+
+  {
+    AutoMutex lck(_mutex) ;
+
+    otuple.set_tag(_tag) ;
+    _tag++ ;
+  }
+
+  submit(otuple, 0);
+  
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  submit(punct, 0) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

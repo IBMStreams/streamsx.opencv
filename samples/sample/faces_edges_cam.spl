@@ -1,0 +1,74 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012, 2013
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite faces_edges_cam {
+
+	graph
+	
+  	stream<IplImage> video = CaptureFromCAM() {}
+  	
+  	stream<IplImage,BoxList> facesAndBoxes = FaceDetection(video) {
+      	param
+        facemodel: getEnvironmentVariable("OPENCV_INSTALL_PATH", "/usr/local") + "/share/OpenCV/haarcascades/haarcascade_frontalface_alt.xml";
+        scale: 2.0; 
+        config
+        threadedPort : queue(video, Sys.DropLast, 10); }
+
+    stream<IplImage> boxedFaces = DrawRectangles(facesAndBoxes) {
+      	param
+        color: [ 255, 255, 100 ];
+        thickness: 3; }
+
+    stream<int32 trackbar_threshold> threshold = TrackBar() {
+      	param
+		title: "Faces and Edges from camera";
+        name: "edge threshold";
+        value: 70;
+        max: 250; 
+        display: getEnvironmentVariable("DISPLAY"); }
+
+	stream<IplImage> bwVideo = CvtColor(video) {
+		param
+		cvt_param: "CV_BGR2GRAY"; 
+        config
+        threadedPort : queue(video, Sys.DropLast, 10); }
+
+	stream<IplImage> thresholdedVideo = Threshold(bwVideo; threshold) {
+		param
+		threshold_type: "CV_THRESH_TOZERO" ;
+		max: 255 ; }
+
+	stream<IplImage> edgedVideo = Sobel(thresholdedVideo) {}
+	
+	stream<IplImage> colorEdgedVideo = CvtColor(edgedVideo) {
+		param
+		channels: 3;
+		cvt_param: "CV_GRAY2BGR"; }
+				
+	stream<IplImage> halfBoxedFaces = Resize(boxedFaces) {
+		param
+		percent: 50; }
+
+	stream<IplImage> halfColorEdgedVideo = Resize(colorEdgedVideo) {
+		param
+		percent: 50;  }
+
+	stream<IplImage> mergedVideo = Collage(halfBoxedFaces; halfColorEdgedVideo) {}
+
+    stream<IplImage> statsVideo = Stats(mergedVideo) {}
+
+    () as Sink1 = X11Viewer(statsVideo) {
+      	param
+		title: "Faces and Edges from camera";
+        display: getEnvironmentVariable("DISPLAY"); } 
+
+}

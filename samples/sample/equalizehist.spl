@@ -1,0 +1,77 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite equalizehist
+{
+  graph
+    stream<IplImage> vid0 = CaptureFromCAM() { 
+      param
+        fps       : 10;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> avg_vid0 = Average(vid0) { 
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage, tuple<uint64 tag>> tagged = Tagger(vid0) {  
+      config
+        placement : partitionColocation("P1");
+    }
+
+    (stream<IplImage, tuple<uint64 tag>> tag_1;
+     stream<IplImage, tuple<uint64 tag>> tag_2;
+     stream<IplImage, tuple<uint64 tag>> tag_3) = ThreadedSplit(tagged) {
+      param
+       bufferSize : 100u;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage, tuple<uint64 tag>> eq_tag_1 = EqualizeHist(tag_1) { }
+
+    stream<IplImage, tuple<uint64 tag>> eq_tag_2 = EqualizeHist(tag_2) { }
+
+    stream<IplImage, tuple<uint64 tag>> nop_tag_3 = Nop(tag_3) {  }
+
+    stream<IplImage, tuple<uint64 tag>> combined = Custom(eq_tag_1; eq_tag_2; nop_tag_3) {
+      logic onTuple  eq_tag_1 : { submit( eq_tag_1, combined); }
+            onTuple  eq_tag_2 : { submit( eq_tag_2, combined); }
+            onTuple nop_tag_3 : { submit(nop_tag_3, combined); }
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> ordered = Sequencer(combined) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> avg_eq = Average(ordered) { 
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> src_n_eq = Collage(avg_vid0; avg_eq) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = X11Viewer(src_n_eq) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+      config
+        placement : partitionColocation("P1");
+    }
+}

@@ -1,0 +1,41 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite modec
+{
+  graph
+    stream<IplImage> vid0 = CaptureFromCAM() {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> md0 = MotionDetection(vid0) {
+      param
+        pyramidlevel : 5;
+        termiteration : 12;
+        featurecount : 8;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> st0 = Stats(md0) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = X11Viewer(st0) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+      config
+        placement : partitionColocation("P1");
+    }
+}

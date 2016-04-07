@@ -1,0 +1,102 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+//# Edge detection with thick lines or dilate
+//# Do smoothing minus the edges
+//# Combine the smooth image and the original image at the edges
+
+composite fun
+{
+  graph
+    stream<IplImage> vid0 = CaptureFromCAM() {
+      config
+        placement : partitionColocation("P1");
+    }
+    stream<IplImage> bw_vid0 = CvtColor(vid0) {
+      param
+        cvt_param : "CV_BGR2GRAY"; /* Constants for color conversion (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> smooth_vid0 = Smooth(bw_vid0) {
+      param
+        iteration : 1;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<int32 trackbar_threshold> tb_low = TrackBar() {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+        name : "low";
+        title : "TrackBar";
+        value : 100;
+        max : 255;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> th_low_vid0 = Threshold(smooth_vid0; tb_low) {
+      param
+        max : 255;
+        threshold_type : "CV_THRESH_TOZERO"; /* Types of thresholding (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> contour_vid0 = DrawContours(th_low_vid0) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> dilate_vid0 = Dilate(contour_vid0) {
+      param
+        iteration : 1;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> cntr_rgb = CvtColor(dilate_vid0) {
+      param
+        channels : 3;
+        cvt_param : "CV_GRAY2BGR"; /* Constants for color conversion (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> smooth2_vid0 = Smooth(vid0) {
+      param
+        iteration : 1;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> final = Apply2(smooth2_vid0; cntr_rgb) {
+      param
+        transform : "cvOr"; /* The CV "in place" function to apply, suitable functions are "cvOr", "cvAnd", "cvAbsDiff", etc. */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> final_stat = Stats(final) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = X11Viewer(final_stat) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+      config
+        placement : partitionColocation("P1");
+    }
+}

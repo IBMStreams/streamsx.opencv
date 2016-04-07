@@ -1,0 +1,46 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+#include <opencv.h>
+
+<%SPL::CodeGen::headerPrologue($model);%>
+
+class MY_OPERATOR : public MY_BASE_OPERATOR 
+{
+public:
+  // Constructor
+  MY_OPERATOR();
+
+  // Destructor
+  virtual ~MY_OPERATOR(); 
+
+  // Notify port readiness
+  void allPortsReady(); 
+
+  // Notify pending shutdown
+  void prepareToShutdown(); 
+
+  // Tuple processing for non-mutating ports
+  void process(Tuple const & tuple, uint32_t port);
+
+private:
+  // Members
+      SPL::Mutex _mutex ;
+
+      int _sock_fd ;
+      dpssupport::opencv::proxy_frame_t _pf ;
+      uint8_t* _pf_comp_data ;
+      uint32_t _pf_comp_data_size ;
+      struct iovec _iov[2] ;
+
+      int establish_connection(int do_listen, const char* hostname, int port);
+}; 
+
+<%SPL::CodeGen::headerEpilogue($model);%>
+

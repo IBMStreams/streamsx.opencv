@@ -1,0 +1,144 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+#include <opencv.h>
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+my $inTupleName = $model->getInputPortAt(0)->getCppTupleName(); 
+
+my $angle = get_param($model, "angle", 1.0);
+my $scale = get_param($model, "scale", 1.0);
+
+my @center = get_param($model, "center", undef) ;
+SPL::CodeGen::error("parameter 'center' should be a pair") if @center && $#center != 1 ;
+
+%>
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR() :
+  _center_x(0),
+  _center_y(0),
+  _angle(0.0),
+  _scale(0.0)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  _angle = <%= $angle %> ;
+  _scale = <%= $scale %> ;
+
+  SPLLOG(L_INFO, "angle=" << _angle << " scale=" << _scale, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & tuple, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  IplImage* img_in = NULL ;
+  const IPort0Type & <%= $inTupleName %> = static_cast<const IPort0Type &>(tuple);
+  <%= copy2img(undef, "$inTupleName", "img_in") %> ;
+
+  IplImage* img_out = cvCreateImage(cvSize(<%= $inTupleName %>.get_ipl_width( ),
+                                          <%= $inTupleName %>.get_ipl_height( )),
+                                  <%= $inTupleName %>.get_ipl_depth( ),
+                                  <%= $inTupleName %>.get_ipl_channels( )) ;
+
+  if (!img_in || !img_out)
+  {
+    THROW(SPLRuntimeOperator, "Unable to create images") ;
+  }
+  else
+  {
+    CvMat* rot_mat = cvCreateMat(2,3,CV_32FC1);
+
+    <% if (@center)
+    { %>
+
+      CvPoint2D32f center = cvPoint2D32f(<%= $center[0] %>, <%= $center[1] %>) ;
+
+      <% }
+    else
+    { %>
+
+      CvPoint2D32f center = cvPoint2D32f(img_in->width/2, img_in->height/2) ;
+
+      <% } %>
+
+    cv2DRotationMatrix(center, _angle, _scale, rot_mat) ;
+
+    cvWarpAffine(img_in, img_out, rot_mat) ;
+
+    cvReleaseMat(&rot_mat) ;
+    cvReleaseImage(&img_in) ;
+
+
+    OPort0Type otuple ;
+    <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+    <%= copy2tuple(undef, "img_out", "otuple") %> ;
+    cvReleaseImage(&img_out) ;
+
+    submit(otuple, 0);
+  }
+  
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  submit(punct, 0) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

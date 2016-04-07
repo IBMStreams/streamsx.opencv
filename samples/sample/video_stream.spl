@@ -1,0 +1,32 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012, 2013
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite video_stream {
+
+  	graph
+    
+    stream<IplImage> video = CaptureFromFile() {
+      	param
+        file: dataDirectory() + "/sample_faces5.mpg";
+        repeat: 1; }
+
+    stream<IplImage> statsVideo = Stats(video) {}
+
+    () as Sink1 = MJPEGStreamer(statsVideo) {
+      	param
+        httpport: 9001; }
+
+    () as Sink2 = HTTPViewer(statsVideo) {
+      	param
+        httpport: 9002; }
+        
+}

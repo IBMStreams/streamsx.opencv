@@ -1,0 +1,30 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite demo1b 
+{
+  graph
+    stream<IplImage> vid0 = CaptureFromFile() {
+      param
+        file : dataDirectory() + "/sample.mpg";
+        repeat : 1;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = MJPEGStreamer(vid0) {
+      param
+        httpport : 9001;
+      config
+        placement : partitionColocation("P1");
+    }
+}

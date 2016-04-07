@@ -1,0 +1,39 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite speed
+{
+  graph
+    stream<IplImage> blank0 = Blank() {
+      param
+        width : 640;
+        height : 480;
+        fps : -1;
+        channels : 3;
+        color : 255bu, 0bu, 0bu;
+        count : 1000;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> vid0 = Smooth(blank0) {
+      param
+        iteration : 1;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = BitBucket(vid0) {
+      config
+        placement : partitionColocation("P1");
+    }
+}

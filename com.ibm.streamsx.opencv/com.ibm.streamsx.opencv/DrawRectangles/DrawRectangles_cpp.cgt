@@ -1,0 +1,150 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+#include <opencv.h>
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind();
+my $inTupleName = $model->getInputPortAt(0)->getCppTupleName(); 
+
+my $thickness = $model->getParameterByName("thickness") ? $model->getParameterByName("thickness")->getValueAt(0)->getCppExpression() : 1;
+my $color = $model->getParameterByName("color") ? $model->getParameterByName("color")->getValueAt(0)->getCppExpression() : undef;
+
+%>
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR()
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & tuple, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  IplImage* img = NULL ;
+  const IPort0Type & <%= $inTupleName %> = static_cast<const IPort0Type &>(tuple);
+  <%= copy2img(undef, "$inTupleName", "img") %> ;
+
+  if (!img)
+  {
+    THROW(SPLRuntimeOperator, "Unable to create image buffer") ;
+  }
+
+  const list<int32_t>& vec_x = <%= $inTupleName %>.get_x_list( ) ;
+  const list<int32_t>& vec_y = <%= $inTupleName %>.get_y_list( ) ;
+  const list<int32_t>& vec_width = <%= $inTupleName %>.get_width_list( ) ;
+  const list<int32_t>& vec_heigth = <%= $inTupleName %>.get_height_list( ) ;
+
+  for(unsigned int i = 0; i < vec_x.size( ); i++)
+  {
+    <% if ($color) { %>
+        
+        if (<%=$color%>.getSize()!=3) { THROW(SPLRuntimeOperator, "color list does not have exactly three elements: [red,green,blue]"); }
+	int red = <%=$color%>.getElement(0);
+	int green = <%=$color%>.getElement(1);
+	int blue = <%=$color%>.getElement(2);	
+	if (red<0) red = 0; if (red>255) red = 255;
+        if (green<0) green = 0; if (green>255) green = 255;
+        if (blue<0) blue = 0; if (blue>255) blue = 255;
+        CvScalar color = CV_RGB( red, green, blue ) ;
+
+      <% } else { %>
+
+         static CvScalar colors[] =
+           {
+             {{0,0,255}},
+             {{0,128,255}},
+             {{0,255,255}},
+             {{0,255,0}},
+             {{255,128,0}},
+             {{255,255,0}},
+             {{255,0,0}},
+             {{255,0,255}}
+           };
+
+         CvScalar color = colors[i%8];
+
+      <% } %> 
+
+    CvPoint pt1;
+    pt1.x = vec_x[i] ;
+    pt1.y = vec_y[i] ;
+
+    CvPoint pt2 = pt1;
+    pt2.x += vec_width[i] ;
+    pt2.y += vec_heigth[i] ;
+    cvRectangle(img, pt1, pt2, color, <%= $thickness %>, 8, 0) ;
+  }
+
+  OPort0Type otuple;
+  <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+  <%= copy2tuple(undef, "img", "otuple") %> ;
+
+  cvReleaseImage(&img) ;
+
+  submit(otuple, 0);
+  
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  submit(punct, 0) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

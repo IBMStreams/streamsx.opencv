@@ -1,0 +1,65 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite onc3
+{
+  graph
+    stream<IplImage> vid0 = CaptureFromCAM() {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> vid1 = SkipEmpty(vid0) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> vid2 = Flip(vid1) {
+      param
+        vertical : true;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = X11Viewer(vid2) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> smth = Smooth(vid2) {
+      param
+        iteration : 4;
+      config
+        placement : partitionColocation("P2");
+    }
+
+    stream<IplImage> cb = CodeBook(smth) {
+      param
+        time : 5;
+      config
+        placement : partitionColocation("P2");
+    }
+
+    stream<IplImage> cb_cc = ConnectedComponents(cb) {
+      config
+        placement : partitionColocation("P2");
+    }
+
+    () as SinkOp2 = X11Viewer(cb_cc) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+      config
+        placement : partitionColocation("P2");
+    }
+}

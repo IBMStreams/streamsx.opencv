@@ -1,0 +1,64 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite contours_on_jpg
+{
+  graph
+    stream<IplImage> vid0 = Blank() {
+      param
+        image : dataDirectory() + "/sample.jpg";
+        fps   : -1;
+        count : 1000;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> bw_vid0 = CvtColor(vid0) {
+      param
+        cvt_param : "CV_BGR2GRAY"; /* Constants for color conversion (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> smooth_bw_vid0 = Smooth(bw_vid0) {
+      param
+       iteration : 1;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> th_vid0 = Threshold(smooth_bw_vid0) {
+      param
+        max            : 255;
+        threshold      : 150;
+        threshold_type : "CV_THRESH_TOZERO"; /* Types of thresholding (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> cntr = DrawContours(th_vid0) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = X11Viewer(cntr) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp2 = BitBucket(cntr) {
+      config
+        placement : partitionColocation("P1");
+    }
+}

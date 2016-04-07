@@ -1,0 +1,269 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+#undef LOG_INFO // conflict with syslog
+#include <fcntl.h>
+#include <format.h>
+#include <hpa_time.h>
+#include <opencv.h>
+#include <opencv/highgui.h>
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+my $inTupleName = $model->getInputPortAt(0)->getCppTupleName(); 
+
+my $httpport = get_param($model, "httpport", undef);
+my $httplabel = get_param($model, "httplabel", undef);
+
+%>
+
+using namespace std;
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR() :
+  _image_count(0),
+  _image(NULL)
+  <% if ($httpport) { %> , _http_server(<%= $httpport %>) <% } %>
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  AutoMutex lck(_mutex) ;
+
+  if (_image)
+  {
+    cvReleaseImage(&_image) ;
+  }
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  SPLLOG(L_INFO, "Starting HTTP server on port " << <%= ($httpport ? $httpport : "\"<default>\"") %>, DBG_ASP) ;
+
+  _http_server.addHandler("/", new dpssupport::http::FctUrlHandler<MY_OPERATOR>(this, &MY_OPERATOR::displayPicture)) ;
+  _http_server.start( ) ;
+
+  SPLLOG(L_INFO, "HTTP server listening on port " << _http_server.getPort( ), DBG_ASP);
+
+  <% if ($httplabel) { %>
+
+    NAM::NAM_NameService& ns = *NAM::NAM_NameService::getInstance( ) ;
+
+    SPLLOG(L_INFO, "Registering HTTP server with label " << QT(<%= qt($httplabel) %>), DBG_ASP);
+
+    try
+    {
+      NAM::HostRecord hr(HostInfo::getMyHostName( ), _http_server.getPort( )) ;
+      ns.registerObject(<%= qt($httplabel) %>, hr) ;
+    }
+    catch (NAM::NAMException& e)
+    {
+      THROW(SPLRuntimeOperator, "Unable to write to name server: " << e.getExplanation( ));
+    }
+
+ <% } %>
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  <% if ($httplabel) { %>
+
+    NAM::NAM_NameService& ns = *NAM::NAM_NameService::getInstance( ) ;
+
+    try
+    {
+      ns.unregisterObject(<%= qt($httplabel) %>) ;
+    }
+    catch (...)
+    {
+    }
+
+  <% } %>
+
+
+  SPLLOG(L_INFO, "Stopping the HTTP server", DBG_ASP);
+
+  _http_server.stop( ) ;
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & tuple, uint32_t port)
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  _image_count++ ;
+
+  IplImage* cvimg = NULL ;
+  const IPort0Type & <%= $inTupleName %> = static_cast<const IPort0Type &>(tuple);
+  <%= copy2img(undef, "$inTupleName", "cvimg") %> ;
+
+  if (!cvimg)
+  {
+    THROW(SPLRuntimeOperator, "Unable to create image") ;
+  }
+  else
+  {
+    AutoMutex lck(_mutex) ;
+
+    if (_image)
+    {
+      cvReleaseImage(&_image) ;
+    }
+
+    _image = cvimg ;
+  }
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+struct file_reader_t
+{
+  int fd ;
+  string name ;
+} ;
+
+//static int file_reader(void *cls, uint64_t pos, char *buf, int max) // for OpenCV 2.0
+static ssize_t file_reader(void *cls, uint64_t pos, char *buf, size_t max) // for OpenCV 2.4
+{
+  struct file_reader_t* f = (struct file_reader_t*)cls ;
+
+  lseek(f->fd, pos, SEEK_SET);
+
+  ssize_t s = read(f->fd, buf, max) ;
+
+  if (s <= 0)
+  {
+    close(f->fd) ;
+    unlink(f->name.c_str( )) ;
+    delete f ;
+
+    return -1 ;
+  }
+  else
+  {
+    return s ;
+  }
+}
+
+void MY_OPERATOR::displayPicture(struct MHD_Connection* connection,
+                                 const char* url,
+                                 const char* method,
+                                 void* data)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::displayPicture") %>, DBG_ASP);
+
+  SPLLOG(L_INFO, "HTTP Request: url=[" << url << "] meth=[" << method << "]", DBG_ASP) ;
+
+  const char* format = url + 1 ;
+  if (!*format)
+  {
+    format = "jpg" ;
+  }
+
+  SSTRING(filename, "/dev/shm/image." << gettid( ) << "." << format) ;
+  SPLLOG(L_TRACE, "Saving current image to " << QT(filename), DBG_ASP) ;
+
+  int rc = 0 ;
+  try
+  {
+    AutoMutex lck(_mutex) ;
+
+    rc = cvSaveImage(filename.c_str( ), _image) ;
+  }
+  catch(cv::Exception& ex)
+  {
+    SPLLOG(L_ERROR, "cvSaveImage failed: " << ex, DBG_ASP) ;
+  }
+
+  if (!rc)
+  {
+    SSTRING(page,
+            "<html><head><title>ERROR</title></head>"
+            "<body><h1>Unable to save image " << QT(filename) << " to disk</h1>"
+            "</body></html>") ;
+
+    _http_server.returnPage(connection, page, 200) ;
+  }
+  else
+  {
+    int fd = open(filename.c_str( ), O_RDONLY, 0400) ;
+
+    if (fd < 0)
+    {
+      SSTRING(page,
+              "<html><head><title>ERROR</title></head>"
+              "<body><h1>Unable to read image " << QT(filename) << " from disk</h1>"
+              "</body></html>") ;
+
+      _http_server.returnPage(connection, page, 200) ;
+    }
+    else
+    {
+      struct file_reader_t* f = new file_reader_t ;
+
+      f->fd = fd ;
+      f->name = filename ;
+
+      struct MHD_Response * response = MHD_create_response_from_callback(MHD_SIZE_UNKNOWN,
+                                                                         32 * 1024,     /* 32k page size */
+                                                                         &file_reader,
+                                                                         f,
+                                                                         NULL);
+
+      int ret = MHD_queue_response(connection, 200, response);
+
+      MHD_destroy_response(response);
+
+      if (ret != MHD_YES)
+      {
+        SPLLOG(L_ERROR, "MHD_queue_response failed", DBG_ASP) ;
+      }
+    }
+  }
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::displayPicture") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

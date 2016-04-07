@@ -1,0 +1,158 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012, 2013
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+#include <opencv.h>
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind();
+my $inTupleName = $model->getInputPortAt(0)->getCppTupleName();
+
+%>
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR()
+{
+    // Initialization code goes here
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+    // Finalization code goes here 
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+    // Notifies that all ports are ready. No tuples should be submitted before
+    // this. Source operators can use this method to spawn threads.
+
+    /*
+      createThreads(1); // Create source thread
+    */
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+    // This is an asynchronous call
+}
+
+// Processing for source and threaded operators   
+void MY_OPERATOR::process(uint32_t idx)
+{
+    // A typical implementation will loop until shutdown
+    /*
+      while(!getPE().getShutdownRequested()) {
+          // do work ...
+      }
+    */
+}
+
+// Tuple processing for mutating ports 
+void MY_OPERATOR::process(Tuple & tuple, uint32_t port)
+{
+    // Sample submit code
+    /* 
+      submit(otuple, 0); // submit to output port 0
+    */
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & tuple, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  IplImage* img_in = NULL ;
+  const IPort0Type & <%= $inTupleName %> = static_cast<const IPort0Type &>(tuple);
+  <%= copy2img(undef, "$inTupleName", "img_in") %> ;
+
+  const list<int32_t>& vec_x = <%= $inTupleName %>.get_x_list( ) ;
+  const list<int32_t>& vec_y = <%= $inTupleName %>.get_y_list( ) ;
+  const list<int32_t>& vec_width = <%= $inTupleName %>.get_width_list( ) ;
+  const list<int32_t>& vec_height = <%= $inTupleName %>.get_height_list( ) ;
+
+  for(unsigned int i = 0; i < vec_x.size( ); i++)
+  {
+  
+		unsigned int _topleft_x = vec_x[i];
+		unsigned int _topleft_y = vec_y[i];
+		unsigned int _bottomright_x = vec_x[i] + vec_width[i];
+		unsigned int _bottomright_y = vec_y[i] + vec_height[i];
+  
+	 IplImage* img_out = cvCreateImage(cvSize((_bottomright_x - _topleft_x),
+	                                           (_bottomright_y - _topleft_y)),
+                                  <%= $inTupleName %>.get_ipl_depth( ),
+	                                  <%= $inTupleName %>.get_ipl_channels( )) ;
+	
+	  if (!img_in || !img_out)
+	  {
+	    THROW(SPLRuntimeOperator, "Unable to create images") ;
+	  }
+	  else
+	  {
+	    /* check for invalid crop rectangle  */
+	    if((_topleft_x < 0 || _topleft_x > img_in->width) ||
+	       (_topleft_y < 0 || _topleft_y > img_in->height) ||
+	       (_bottomright_x < 0 || _bottomright_x > img_in->width) ||
+	       (_bottomright_y < 0 || _bottomright_y > img_in->height))
+	    {
+	      THROW(SPLRuntimeOperator, "Invalid crop rectangle, both top-left and bottom-right corners must be within input image's dimensions") ;
+	    }
+	
+	    /* crop image and copy to output */
+	    cvSetImageROI(img_in, cvRect(_topleft_x, _topleft_y, (_bottomright_x - _topleft_x), (_bottomright_y - _topleft_y)));
+	    cvCopy(img_in, img_out, NULL);
+	    cvResetImageROI(img_in);
+	
+	    OPort0Type otuple ;
+	    <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+	    <%= copy2tuple(undef, "img_out", "otuple") %> ;
+	    cvReleaseImage(&img_out) ;
+
+	    <%
+	    if ($model->getOutputPortAt(0)->getAttributeByName("ipl_x")) { print "otuple.set_ipl_x(_topleft_x);\n"; }
+	    if ($model->getOutputPortAt(0)->getAttributeByName("ipl_y")) { print "otuple.set_ipl_y(_topleft_y);\n"; }
+	    %>
+
+	    submit(otuple, 0);
+	  }	
+  }
+  
+	cvReleaseImage(&img_in) ;	 
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  submit(punct, 0) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

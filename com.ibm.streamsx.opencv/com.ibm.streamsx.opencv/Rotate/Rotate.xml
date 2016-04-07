@@ -1,0 +1,78 @@
+<?xml version="1.0" ?>
+<!--                                                             -->
+<!-- Licensed Materials - Property of IBM                        -->
+<!-- Copyright IBM Corp. 2012                                    -->
+<!-- US Government Users Restricted Rights - Use, duplication or -->
+<!-- disclosure restricted by GSA ADP Schedule Contract with     -->
+<!-- IBM Corp.                                                   -->
+<!--                                                             -->
+<operatorModel
+  xmlns="http://www.ibm.com/xmlns/prod/streams/spl/operator" 
+  xmlns:cmn="http://www.ibm.com/xmlns/prod/streams/spl/common" 
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.ibm.com/xmlns/prod/streams/spl/operator operatorModel.xsd">
+  <cppOperatorModel>
+    <context>
+      <libraryDependencies>
+        <library>
+          <cmn:description>Required libraries</cmn:description>
+          <cmn:managedLibrary>
+            <cmn:command>../Common/LibInfo.pl</cmn:command>
+          </cmn:managedLibrary>
+        </library>
+      </libraryDependencies>
+      <providesSingleThreadedContext>Never</providesSingleThreadedContext>
+    </context>  
+    <parameters>
+      <allowAny>false</allowAny>
+      <parameter>
+        <name>center</name>
+        <description>center point {int,int} to rotate around, default uses the center of the image</description>
+        <optional>true</optional>
+        <rewriteAllowed>false</rewriteAllowed>
+        <expressionMode>AttributeFree</expressionMode>
+        <type>int32</type>
+        <cardinality>2</cardinality>
+      </parameter>
+      <parameter>
+        <name>angle</name>
+        <description>rotation angle in degrees and positive values mean counter-clockwise</description>
+        <optional>false</optional>
+        <rewriteAllowed>false</rewriteAllowed>
+        <expressionMode>AttributeFree</expressionMode>
+        <type>float64</type>
+        <cardinality>1</cardinality>
+      </parameter>
+      <parameter>
+        <name>scale</name>
+        <description> isotropic scale factor. Less than 1.0 will be smaller and greater than 1.0 will be larger, default 1.0 (no scaling)</description>
+        <optional>true</optional>
+        <rewriteAllowed>false</rewriteAllowed>
+        <expressionMode>AttributeFree</expressionMode>
+        <type>float64</type>
+        <cardinality>1</cardinality>
+      </parameter>
+    </parameters>
+    <inputPorts>
+      <inputPortSet>
+        <tupleMutationAllowed>false</tupleMutationAllowed>
+        <windowingMode>NonWindowed</windowingMode>
+        <windowPunctuationInputMode>Oblivious</windowPunctuationInputMode>
+        <cardinality>1</cardinality>
+        <optional>false</optional>
+      </inputPortSet>      
+    </inputPorts>
+    <outputPorts>
+      <outputPortSet>
+        <expressionMode>Expression</expressionMode> 
+        <autoAssignment>true</autoAssignment>
+        <completeAssignment>false</completeAssignment>
+        <rewriteAllowed>false</rewriteAllowed>
+        <windowPunctuationOutputMode>Preserving</windowPunctuationOutputMode>
+        <tupleMutationAllowed>false</tupleMutationAllowed>
+        <cardinality>1</cardinality>
+        <optional>false</optional>
+      </outputPortSet>          
+    </outputPorts>
+  </cppOperatorModel>
+</operatorModel>

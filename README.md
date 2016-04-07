@@ -1,11 +1,7 @@
-# streamsx.opencv
-Toolkit for processing videos in a Streams application
+streamsx.opencv
+===============
 
-# Welcome to IBMStreams
+The [OpenCV toolkit for IBM Streams](https://github.com/IBMStreams/streamsx.opencv) provides operators for processing images. 
 
-As a new project, here are a few resources to help you get started:
+For information about the toolkit, please see [http://ibmstreams.github.io/streamsx.opencv/](http://ibmstreams.github.io/streamsx.opencv/).
 
-1.  To add content, refer to the [IBM Streams repository guidelines](https://github.com/IBMStreams/administration/wiki/IBMStreams-repository-guidelines)
-2.  To create a website, refer to the page: [Creating a web page for your toolkit](https://github.com/IBMStreams/administration/wiki/Creating-a-web-page-for-your-toolkit)
-3.  Understand the project [incubation process](https://github.com/IBMStreams/administration/wiki/Project-Incubation-Process).
-4.  Before a release, understand the suggested [versioning guildelines](https://github.com/IBMStreams/administration/wiki/Toolkit-Versions) and [release process](https://github.com/IBMStreams/administration/wiki/On-Demand-Release-Process).

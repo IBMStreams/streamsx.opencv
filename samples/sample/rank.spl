@@ -1,0 +1,106 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012, 2013
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite rank
+{
+  graph
+    stream<IplImage> vid0 = CaptureFromCAM() {
+      param
+        fps : 15;
+      config
+        placement : partitionColocation("src");
+    }
+
+    stream<IplImage> min_vid1 = SkipFrame(vid0) {
+      param
+        style : "adaptive";
+      config
+        placement : partitionColocation("src");
+    }
+
+    stream<IplImage> min_vid2 = RankFilter(min_vid1) {
+      param
+        radius : 3;
+        mode : "min";
+      config
+        placement : partitionColocation("rank_min");
+    }
+
+    stream<IplImage> min_vid2_st = Stats(min_vid2) {
+      config
+        placement : partitionColocation("viz_min");
+    }
+
+    () as SinkOp1 = X11Viewer(min_vid2_st) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+        title : "CPU min";
+      config
+        placement : partitionColocation("viz_min");
+    }
+
+    stream<IplImage> med_vid1 = SkipFrame(vid0) {
+      param
+        style : "adaptive";
+      config
+        placement : partitionColocation("src");
+    }
+
+    stream<IplImage> med_vid2 = RankFilter(med_vid1) {
+      param
+        radius : 3;
+        mode : "med";
+      config
+        placement : partitionColocation("rank_med");
+    }
+
+    stream<IplImage> med_vid2_st = Stats(med_vid2) {
+      config
+        placement : partitionColocation("viz_med");
+    }
+
+    () as SinkOp2 = X11Viewer(med_vid2_st) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+        title : "CPU med";
+      config
+        placement : partitionColocation("viz_med");
+    }
+
+    stream<IplImage> max_vid1 = SkipFrame(vid0) {
+      param
+        style : "adaptive";
+      config
+        placement : partitionColocation("src");
+    }
+
+    stream<IplImage> max_vid2 = RankFilter(max_vid1) {
+      param
+        radius : 3;
+        mode : "max";
+      config
+        placement : partitionColocation("rank_max");
+    }
+
+    stream<IplImage> max_vid2_st = Stats(max_vid2) {
+      config
+        placement : partitionColocation("viz_max");
+    }
+
+    () as SinkOp3 = X11Viewer(max_vid2_st) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+        title : "CPU max";
+      config
+        placement : partitionColocation("viz_max");
+    }
+}

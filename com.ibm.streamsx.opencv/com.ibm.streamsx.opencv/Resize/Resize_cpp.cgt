@@ -1,0 +1,162 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+my $inTupleName = $model->getInputPortAt(0)->getCppTupleName(); 
+
+my $img_width = get_param($model, "width", undef) ;
+my $img_height = get_param($model, "height", undef) ;
+my $img_percent = get_param($model, "percent", undef) ;
+
+SPL::CodeGen::error("Must specify at least one of width/height/percent parameter") unless $img_width || $img_height || $img_percent ;
+SPL::CodeGen::error("Percent cannot be used with width/height") if $img_percent &&($img_width || $img_height) ;
+
+%>
+
+#undef LOG_INFO // conflict with syslog
+#include <opencv.h>
+
+using namespace std;
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR()
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & tuple, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  IPort0Type const & <%= $inTupleName %> = static_cast<IPort0Type const &>(tuple);
+  int new_width = <%= $inTupleName %>.get_ipl_width( ) ;
+  int new_height = <%= $inTupleName %>.get_ipl_height( ) ;
+  
+  <% if ($img_percent)
+  { %>
+    
+    new_width = (<%= $img_percent %> * <%= $inTupleName %>.get_ipl_width( )) / 100 ;
+    new_height = (<%= $img_percent %> * <%= $inTupleName %>.get_ipl_height( )) / 100 ;
+    
+  <% }
+  else
+  { %>
+    
+    <% if ($img_width)
+    { %>
+  
+      new_width = <%= $img_width %> ;
+      
+      <% if ($img_height)
+         { %>
+           
+           new_height = <%= $img_height %> ;
+           
+           <% }
+      else
+      { %>
+        
+        new_height = ((<%= $inTupleName %>.get_ipl_height( ) * new_width * 100) / <%= $inTupleName %>.get_ipl_width( )) / 100 ;
+        
+        <% } %>
+      
+      
+            <% }
+    else
+    { %>
+      
+      new_height = <%= $img_height %> ;
+      new_width = ((<%= $inTupleName %>.get_ipl_width( ) * new_height * 100) / <%= $inTupleName %>.get_ipl_height( )) / 100 ;
+      
+      <% }
+  } %>
+  
+  IplImage* img_in = NULL ;
+
+  <%= copy2img(undef, "$inTupleName", "img_in") %> ;
+
+  IplImage* img_out = cvCreateImage(cvSize(new_width, new_height),
+                                    <%= $inTupleName %>.get_ipl_depth( ),
+                                    <%= $inTupleName %>.get_ipl_channels( )) ;
+  
+  if (!img_in || !img_out)
+  {
+    THROW(SPLRuntimeOperator, "Unable to create images") ;
+  }
+  else
+  {
+    cvResize(img_in, img_out) ;
+    cvReleaseImage(&img_in) ;
+    
+    OPort0Type otuple ;
+    <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+    <%= copy2tuple(undef, "img_out", "otuple") %> ;
+    cvReleaseImage(&img_out) ;
+
+    submit(otuple, 0);
+  }
+  
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  submit(punct, 0) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

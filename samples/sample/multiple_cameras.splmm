@@ -1,0 +1,86 @@
+<% 	
+		
+my @cameraDevices = glob("/dev/video*");
+my @cameraIDs = map { m/(\d)$/ } @cameraDevices;
+
+print "// camera devices: " . join(",",@cameraDevices) . "\n";		
+print "// camera IDs: " . join(",",@cameraIDs) . "\n";		
+
+%>
+
+namespace sample;  
+
+use com.ibm.streamsx.opencv::*;  
+
+composite BoxedFaces(output BoxedFaceVideoStream) {
+
+	param  
+	expression<int32> $cameraIndex;
+	expression<rstring> $modelName;
+	expression<rstring> $modelDirectory: getEnvironmentVariable("OPENCV_INSTALL_PATH", "/usr/local") + "/share/OpenCV/haarcascades";
+	expression<float64> $boxScale: 2.0; 
+	expression<int32> $boxThickness: 3;
+	
+	graph
+
+  	stream<IplImage> VideoStream = CaptureFromCAM() {  
+  	param 
+  		index: $cameraIndex; width: 640; height: 480; fps: 10; }
+  		
+  	stream<IplImage,BoxList> VideoAndBoxStream = FaceDetection(VideoStream) {
+    param
+        facemodel: $modelDirectory + "/haarcascade_" + $modelName + ".xml";
+        scale: $boxScale; }
+        
+        
+    stream<IplImage,BoxList> LabelledVideoAndBoxStream = AddText(VideoAndBoxStream as In) { 
+    logic state: {
+    	mutable int32 frameCounter = 0;
+    	mutable int32 matchCounter = 0; } 
+    onTuple In: {
+    	frameCounter++;
+    	matchCounter += size(x_list); }
+    param
+       	text: "frames processed: " + (rstring)frameCounter + "\n" + $modelName + " matches: " + (rstring)matchCounter;
+       	x: 20;
+       	y: -50;
+       	size: 0.66;
+       	forecolor: [255,255,100]; } 
+
+    stream<IplImage> BoxedFaceVideoStream = DrawRectangles(LabelledVideoAndBoxStream as In) {
+    logic state: {
+    	int32 minimumIntensity = 100;
+    	mutable list<int32> currentColor = [ minimumIntensity, 255, 255 ];
+    	mutable list<int32> deltaColor = [ 1, -1, 0 ]; }
+    onTuple In: {
+    	if (min(currentColor)<minimumIntensity) { deltaColor = [ deltaColor[2], deltaColor[0], deltaColor[1] ]; }
+    	currentColor = currentColor .+ deltaColor; }
+    param
+        color: currentColor; 
+        thickness: $boxThickness; }	
+	
+    () as ViewerSink = X11Viewer(BoxedFaceVideoStream) {
+    param
+	title: "camera /dev/video" + (rstring)$cameraIndex + ", model '" + $modelName + "'"; 
+        display: getEnvironmentVariable("DISPLAY"); } 
+}
+
+
+
+composite multiple_cameras { 
+
+	param  
+	expression<rstring> $modelName: getSubmissionTimeValue("modelName", "frontalface_alt"); // or "upperbody" or "fullbody" 
+
+	graph
+	
+	<% foreach (@cameraIDs) { %>
+	stream<IplImage> VideoStream<%=$_%> = BoxedFaces() { param cameraIndex: <%=$_%>; modelName: $modelName; }	
+	<% } %>
+
+	<% if (scalar(@cameraIDs)==0) { %>
+	stream<IplImage> NoVideoStream = Custom() {}
+	() as ViewerSink = X11Viewer(NoVideoStream) { param  title: "no cameras found"; display: getEnvironmentVariable("DISPLAY"); } 
+	<% } %>
+
+}

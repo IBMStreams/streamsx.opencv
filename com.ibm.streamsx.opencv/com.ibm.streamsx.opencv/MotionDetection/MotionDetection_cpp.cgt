@@ -1,0 +1,482 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+#include <opencv.h>
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+my $inTupleName = $model->getInputPortAt(0)->getCppTupleName(); 
+
+my $threshold = get_param($model, "threshold", 1);
+my $term_eps = get_param($model, "termeps", 0.3);
+
+SPL::CodeGen::error("Invalid number of input ports") if $model->getNumberOfInputPorts() < 1 || $model->getNumberOfInputPorts() > 4 ;
+
+%>
+
+#define DBG_ASP "opencv"
+
+static const double pi = 3.14159265358979323846;
+
+static CvScalar class_color[] = {
+  CV_RGB(255,0,0),
+  CV_RGB(0,255,0),
+  CV_RGB(0,0,255),
+  CV_RGB(255,255,0),
+  CV_RGB(255,0,255),
+  CV_RGB(0,255,255),
+} ; 
+
+inline static double square(double a)
+{
+  return a * a;
+}
+
+typedef struct flow_vector
+{
+  CvPoint2D32f p,q;
+  double angle, hypotenuse ;
+} flow_vector_t ;
+
+static int is_equal( const void* _a, const void* _b, void* userdata )
+{
+  const flow_vector_t* a = (const flow_vector_t*)_a;
+  const flow_vector_t* b = (const flow_vector_t*)_b;
+  double threshold = *(double*)userdata ;
+
+  if (fabs(a->angle - b->angle) <= fabs(a->angle) * threshold)
+    // && fabs(a->hypotenuse - b->hypotenuse) <= fabs(a->hypotenuse) * threshold)
+  {
+    return 1 ;
+  }
+
+  return 0 ;
+}
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR() :
+  _frame_count(0),
+  _storage(NULL),
+  _point_seq(NULL),
+  _previous_frame(NULL),
+  _new_frame(NULL),
+  _eig_image(NULL),
+  _temp_image(NULL),
+  _pyramid1(NULL),
+  _pyramid2(NULL)
+  <%= opencv_tb_init($model, "pyramidlevel") %>
+  <%= opencv_tb_init($model, "termiteration") %>
+  <%= opencv_tb_init($model, "featurecount") %>
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  _threshold = <%= $threshold %> ;
+
+  _storage = cvCreateMemStorage(0) ;
+  _point_seq = cvCreateSeq(CV_SEQ_ELTYPE_GENERIC,
+                           sizeof(CvSeq),
+                           sizeof(flow_vector_t),
+                           _storage);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+// Tuple processing for mutating ports
+void MY_OPERATOR::process(Tuple & tuple, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  <%= opencv_tb_implement($model, "pyramidlevel") %>
+  <%= opencv_tb_implement($model, "termiteration") %>
+  <%= opencv_tb_implement($model, "featurecount") %>
+
+  IplImage* img_in = NULL ;
+
+  IPort0Type & <%= $inTupleName %> = static_cast<IPort0Type &>(tuple);
+  <%= copy2img(undef, "$inTupleName", "img_in") %> ;
+
+  if (!img_in)
+  {
+    THROW(SPLRuntimeOperator, "Unable to create image") ;
+  }
+
+  SPLLOG(L_DEBUG, "Receiving frame #" << _frame_count, DBG_ASP) ;
+
+  if (_frame_count == 0)
+  {
+    _previous_frame = cvCreateImage(cvSize(img_in->width, img_in->height),
+                                    IPL_DEPTH_8U, 1) ;
+
+    _new_frame = cvCreateImage(cvSize(img_in->width, img_in->height),
+                               IPL_DEPTH_8U, 1) ;
+
+    _eig_image = cvCreateImage(cvSize(img_in->width, img_in->height),
+                               IPL_DEPTH_32F, 1) ;
+
+    _temp_image = cvCreateImage(cvSize(img_in->width, img_in->height),
+                                IPL_DEPTH_32F, 1) ;
+
+    _pyramid1 = cvCreateImage(cvSize(img_in->width, img_in->height),
+                              IPL_DEPTH_8U, 1) ;
+
+    _pyramid2 = cvCreateImage(cvSize(img_in->width, img_in->height),
+                              IPL_DEPTH_8U, 1) ;
+
+    if (!_previous_frame ||
+        !_new_frame ||
+        !_eig_image ||
+        !_temp_image ||
+        !_pyramid1 ||
+        !_pyramid2)
+    {
+      THROW(SPLRuntimeOperator, "Unable to create images") ;
+    }
+
+    cvConvertImage(img_in, _previous_frame, 0) ;
+    cvEqualizeHist(_previous_frame, _previous_frame) ;
+    cvSmooth(_previous_frame, _previous_frame) ;
+  }
+  else
+  {
+    int number_of_features = <%= opencv_tb_get($model, "featurecount") %> ;
+
+    if (number_of_features <= 0)
+    {
+      number_of_features = 1 ;
+    }
+
+    CvPoint2D32f _previous_features[number_of_features] ;
+    CvPoint2D32f _new_features[number_of_features] ;
+    char _optical_flow_found_feature[number_of_features] ;
+    float _optical_flow_feature_error[number_of_features] ;
+
+    SPLLOG(L_DEBUG, "Parameter: term("
+           << "iteration=" << <%= opencv_tb_get($model, "termiteration") %> << ","
+           << " epsilon=" << <%= $term_eps %> << ")"
+           << " pyramidlevel=" << <%= opencv_tb_get($model, "pyramidlevel") %>
+           << " featurecount=" << number_of_features, DBG_ASP) ;
+
+    if (img_in->width != _previous_frame->width ||
+        img_in->height != _previous_frame->height)
+    {
+      SPLLOG(L_ERROR, "Current and previous images are of different types "
+             << "(Curr: " << IINFO(img_in)
+             << " Prev: " << IINFO(_previous_frame) << ")", DBG_ASP) ;
+
+      cvReleaseImage(&img_in) ;
+
+      return ;
+    }
+
+    cvConvertImage(img_in, _new_frame, 0) ;
+    cvEqualizeHist(_new_frame, _new_frame) ;
+
+    /* Actually run the Shi and Tomasi algorithm!!
+     * "frame1_1C" is the input image.
+     * "eig_image" and "temp_image" are just workspace for the algorithm.
+     * The first ".01" specifies the minimum quality of the features (based on the eigenvalues).
+     * The second ".01" specifies the minimum Euclidean distance between features.
+     * "NULL" means use the entire input image.  You could point to a part of the image.
+     * WHEN THE ALGORITHM RETURNS:
+     * "frame1_features" will contain the feature points.
+     * "number_of_features" will be set to a value <= 400 indicating the number of feature points found.
+     */
+
+
+    cvGoodFeaturesToTrack(_previous_frame, _eig_image, _temp_image, _previous_features,
+                          &number_of_features, .01, .01, NULL);
+
+    SPLLOG(L_DEBUG, number_of_features << " good features found", DBG_ASP) ;
+
+    /* Pyramidal Lucas Kanade Optical Flow! */
+
+    /* This is the window size to use to avoid the aperture problem (see slide "Optical Flow: Overview"). */
+    CvSize optical_flow_window = cvSize(3,3);
+
+    /* This termination criteria tells the algorithm to stop when it has either done 20 iterations or when
+     * epsilon is better than .3.  You can play with these parameters for speed vs. accuracy but these values
+     * work pretty well in many situations.
+     */
+
+    CvTermCriteria optical_flow_termination_criteria = cvTermCriteria(CV_TERMCRIT_ITER |
+                                                                      0 /*CV_TERMCRIT_EPS*/,
+                                                                      <%= opencv_tb_get($model, "termiteration") %>,
+                                                                      <%= $term_eps %>);
+
+    /* Actually run Pyramidal Lucas Kanade Optical Flow!!
+     * "frame1_1C" is the first frame with the known features.
+     * "frame2_1C" is the second frame where we want to find the first frame's features.
+     * "pyramid1" and "pyramid2" are workspace for the algorithm.
+     * "frame1_features" are the features from the first frame.
+     * "frame2_features" is the (outputted) locations of those features in the second frame.
+     * "number_of_features" is the number of features in the frame1_features array.
+     * "optical_flow_window" is the size of the window to use to avoid the aperture problem.
+     * "5" is the maximum number of pyramids to use.  0 would be just one level.
+     * "optical_flow_found_feature" is as described above (non-zero iff feature found by the flow).
+     * "optical_flow_feature_error" is as described above (error in the flow for this feature).
+     * "optical_flow_termination_criteria" is as described above (how long the algorithm should look).
+     * "0" means disable enhancements.  (For example, the second array isn't pre-initialized with guesses.)
+     */
+    cvCalcOpticalFlowPyrLK(_previous_frame,
+                           _new_frame,
+                           _pyramid1,
+                           _pyramid2,
+                           _previous_features,
+                           _new_features,
+                           number_of_features,
+                           optical_flow_window,
+                           <%= opencv_tb_get($model, "pyramidlevel") %>,
+                           _optical_flow_found_feature,
+                           _optical_flow_feature_error,
+                           optical_flow_termination_criteria,
+                           0);
+
+    SPLLOG(L_DEBUG, number_of_features << " features tracked", DBG_ASP) ;
+
+    int count = 0 ;
+    double angle_sum = 0 ;
+    double hypotenuse_sum = 0 ;
+
+    cvClearSeq(_point_seq) ;
+
+    for(int i=0; i<number_of_features; i++)
+    {
+      /* If Pyramidal Lucas Kanade didn't really find the feature, skip it. */
+      if (_optical_flow_found_feature[i] == 0)
+      {
+        continue ;
+      }
+
+      flow_vector_t fv ;
+      fv.p.x = _previous_features[i].x;
+      fv.p.y = _previous_features[i].y;
+      fv.q.x = _new_features[i].x;
+      fv.q.y = _new_features[i].y;
+
+      fv.angle = atan2(fv.p.y - fv.q.y, fv.p.x - fv.q.x);
+      fv.hypotenuse = sqrt(square(fv.p.y - fv.q.y) + square(fv.p.x - fv.q.x));
+
+      // elimiate things that are too large...
+      if ((int)fv.hypotenuse > img_in->height / 10)
+      {
+        continue ;
+      }
+
+      // elimiate things that are too short...
+      if ((int)fv.hypotenuse < 3)
+      {
+          continue ;
+      }
+
+      angle_sum += fv.angle ;
+      hypotenuse_sum += fv.hypotenuse ;
+      count++ ;
+
+      cvSeqPush(_point_seq, &fv);
+    }
+
+    SPLLOG(L_DEBUG, count << " features selected", DBG_ASP) ;
+
+    if (count > 0)
+    {
+      angle_sum = angle_sum / (double)count ;
+      hypotenuse_sum = hypotenuse_sum / (double)count ;
+
+      SPLLOG(L_DEBUG, "Average motion detected: " << hypotenuse_sum << " pixels at " << (int)(angle_sum * 180.0 / pi) << " degree", DBG_ASP) ;
+
+      CvSeq* labels = 0;
+      int class_count = cvSeqPartition(_point_seq,
+                                       NULL,
+                                       &labels,
+                                       is_equal,
+                                       &_threshold) ;
+
+      int class_size[class_count] ;
+      double class_sum_hypo[class_count] ;
+      int class_rank[class_count] ;
+
+      for(int i = 0; i < class_count; i++)
+      {
+        class_size[i] = 0 ;
+        class_sum_hypo[i] = 0 ;
+        class_rank[i] = -1 ;
+      }
+
+      for(int i = 0; i < labels->total; i++)
+      {
+        flow_vector_t* fv = (flow_vector_t*)cvGetSeqElem(_point_seq, i);
+        int lbl = *(int*)cvGetSeqElem(labels, i) ;
+        class_size[lbl]++ ;
+        class_sum_hypo[lbl] += fv->hypotenuse ;
+      }
+
+      int rank = 0 ;
+      while(rank < class_count)
+      {
+        int max = -1 ;
+        int pos = -1 ;
+
+        for(int i=0; i< class_count; i++)
+        {
+          if (class_rank[i] == -1)
+          {
+            if (class_sum_hypo[i] > max)
+            {
+              max = class_size[i] ;
+              pos = i ;
+            }
+          }
+        }
+
+        class_rank[pos] = rank ;
+
+        rank++ ;
+      }
+
+      SPLLOG(L_DEBUG, "Classes found: " << class_count, DBG_ASP) ;
+      for(int i = 0; i < class_count; i++)
+      {
+        SPLLOG(L_DEBUG, "Class size[" << i << "]: " << class_size[i] << " {" << (int)(class_sum_hypo[i] / (double)class_size[i]) << "}", DBG_ASP) ;
+      }
+
+      for(int i = 0; i < labels->total; i++)
+      {
+        flow_vector_t* fv = (flow_vector_t*)cvGetSeqElem(_point_seq, i);
+        int lbl = *(int*)cvGetSeqElem(labels, i) ;
+
+        //         if (class_size[lbl] <= 10)
+        //         {
+        //           continue ;
+        //         }
+
+        int line_thickness = 1;
+
+        /* CV_RGB(red, green, blue) is the red, green, and blue components
+         * of the color you want, each out of 255.
+         */
+        CvScalar line_color = CV_RGB(0,0,0) ;
+        if (class_rank[lbl] < 6)
+        {
+          line_color = class_color[lbl] ;
+        }
+
+        /* Let's make the flow field look nice with arrows. */
+
+        /* The arrows will be a bit too short for a nice visualization because of the high framerate
+         * (ie: there's not much motion between the frames).  So let's lengthen them by a factor of 3.
+         */
+        CvPoint p,q;
+        p.x = (int)fv->p.x ;
+        p.y = (int)fv->p.y ;
+        q.x = (int)fv->q.x ;
+        q.y = (int)fv->q.y ;
+
+        /* Here we lengthen the arrow by a factor of three. */
+        q.x = (int) (p.x - 3 * fv->hypotenuse * cos(fv->angle));
+        q.y = (int) (p.y - 3 * fv->hypotenuse * sin(fv->angle));
+
+        /* Now we draw the main line of the arrow. */
+        /* "frame1" is the frame to draw on.
+         * "p" is the point where the line begins.
+         * "q" is the point where the line stops.
+         * "CV_AA" means antialiased drawing.
+         * "0" means no fractional bits in the center cooridinate or radius.
+         */
+        cvLine(img_in, p, q, line_color, line_thickness, CV_AA, 0) ;
+
+        /* Now draw the tips of the arrow.  I do some scaling so that the
+         * tips look proportional to the main line of the arrow.
+         */
+        p.x = (int) (q.x + 9 * cos(fv->angle + pi / 4)) ;
+        p.y = (int) (q.y + 9 * sin(fv->angle + pi / 4)) ;
+        cvLine(img_in, p, q, line_color, line_thickness, CV_AA, 0) ;
+
+        p.x = (int) (q.x + 9 * cos(fv->angle - pi / 4)) ;
+        p.y = (int) (q.y + 9 * sin(fv->angle - pi / 4)) ;
+        cvLine(img_in, p, q, line_color, line_thickness, CV_AA, 0) ;
+      }
+
+      /* Draw the overall movement direction (stretch by a factor of 5...) */
+      hypotenuse_sum *= 5 ;
+
+      CvPoint p,q;
+
+      p.x = img_in->width / 2 ;
+      p.y = img_in->height / 2 ;
+
+      q.x = (int)(p.x + hypotenuse_sum * cos(angle_sum)) ;
+      q.y = (int)(p.y + hypotenuse_sum * sin(angle_sum)) ;
+
+      CvScalar line_color = CV_RGB(0,0,255);
+      cvLine(img_in, p, q, line_color, 3, CV_AA, 0);
+    }
+
+    cvConvertImage(_new_frame, _previous_frame, 0);
+
+    OPort0Type otuple ;
+    <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+    <%= copy2tuple(undef, "img_in", "otuple") %> ;
+    cvReleaseImage(&img_in) ;
+
+    submit(otuple, 0);
+  }
+
+  _frame_count++ ;
+  
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  submit(punct, 0) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

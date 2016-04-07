@@ -1,0 +1,85 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012, 2013
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite threshold
+{
+  graph
+    stream<IplImage> vid0 = CaptureFromFile() {
+      param
+        file : dataDirectory() + "/sample_faces5.mpg";
+        repeat : 1;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> bw_vid0 = CvtColor(vid0) {
+      param
+        cvt_param : "CV_BGR2GRAY"; /* Constants for color conversion (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<int32 trackbar_threshold> tb_low = TrackBar() {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+        name : "low";
+        title : "bob";
+        value : 32;
+        max : 255;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<int32 trackbar_threshold> tb_high = TrackBar() {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+        name : "high";
+        title : "bob";
+        value : 192;
+        max : 255;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> th_low_vid0 = Threshold(bw_vid0; tb_low) {
+      param
+        max : 255;
+        threshold_type : "CV_THRESH_TOZERO"; /* Types of thresholding (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> th_high_vid0 = Threshold(bw_vid0; tb_high) {
+      param
+        max : 255;
+        threshold_type : "CV_THRESH_BINARY"; /* Types of thresholding (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> final = Apply2(th_low_vid0; th_high_vid0) {
+      param
+        transform : "cvOr"; /* The CV "in place" function to apply, suitable functions are "cvOr", "cvAnd", "cvAbsDiff", etc. */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = X11Viewer(final) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+        title : "bob";
+      config
+        placement : partitionColocation("P1");
+    }
+    config
+      logLevel : error;
+}

@@ -1,0 +1,64 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012, 2013
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite record
+{
+  graph
+    stream<IplImage> vid0 = CaptureFromFile() {
+      param
+        file : dataDirectory() + "/sample_faces5.mpg";
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> vid1 = Flip(vid0) {
+      param
+        vertical : true;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> ts_vid0 = TimeStamp(vid1) {
+      param
+        relative : 1;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp0 = X11Viewer(vid0) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+        title   : "Original";
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = X11Viewer(ts_vid0) {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+        title   : "Flipped and Timestamped";
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp2 = SaveToFile(ts_vid0) {
+      param
+        filename : dataDirectory() + "/record-out.avi";
+        rate : 10;
+        fourcc : "mjpg";
+      config
+        placement : partitionColocation("P1");
+    }
+
+  config
+    logLevel : error;
+}

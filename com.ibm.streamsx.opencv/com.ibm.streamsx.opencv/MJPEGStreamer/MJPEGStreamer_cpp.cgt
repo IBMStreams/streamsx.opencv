@@ -1,0 +1,413 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+#include <sys/stat.h>
+#undef LOG_INFO // conflict with syslog
+#include <fcntl.h>
+#include <format.h>
+#include <hpa_time.h>
+#include <opencv.h>
+#include <opencv/highgui.h>
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+my $inTupleName = $model->getInputPortAt(0)->getCppTupleName(); 
+
+my $httpport = get_param($model, "httpport", undef);
+my $httplabel = get_param($model, "httplabel", undef);
+
+%>
+
+using namespace std;
+
+#define BOUNDARY "7ad2ae934cf254645603a4490fd85085"
+#define DBG_ASP "opencv"
+#define STAT_INTERVAL 10.0
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR() :
+  _terminate(false),
+  _frame_count(0),
+  _frame(NULL),
+  _request_count(0)
+  <% if ($httpport) { %> , _http_server(<%= $httpport %>) <% } %>
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  AutoMutex lck(_mutex) ;
+
+  if (_frame)
+  {
+    cvReleaseImage(&_frame) ;
+  }
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  SPLLOG(L_INFO, "Starting HTTP server on port " << <%= ($httpport ? $httpport : "\"<default>\"") %>, DBG_ASP) ;
+
+  _http_server.addHandler("/", new dpssupport::http::FctUrlHandler<MY_OPERATOR>(this, &MY_OPERATOR::streamData)) ;
+  _http_server.start( ) ;
+
+  SPLLOG(L_INFO, "HTTP server listening on port " << _http_server.getPort( ), DBG_ASP);
+
+  <% if ($httplabel) { %>
+
+    NAM::NAM_NameService& ns = *NAM::NAM_NameService::getInstance( ) ;
+
+    SPLLOG(L_INFO, "Registering HTTP server with label " << QT(<%= qt($httplabel) %>), DBG_ASP);
+
+    try
+    {
+      NAM::HostRecord hr(HostInfo::getMyHostName( ), _http_server.getPort( )) ;
+      ns.registerObject(<%= qt($httplabel) %>, hr) ;
+    }
+    catch (NAM::NAMException& e)
+    {
+      THROW(SPLRuntimeOperator, "Unable to write to name server: " << e.getExplanation( ));
+    }
+
+ <% } %>
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  _terminate = true ;
+
+  <% if ($httplabel) { %>
+
+    NAM::NAM_NameService& ns = *NAM::NAM_NameService::getInstance( ) ;
+
+    try
+    {
+      ns.unregisterObject(<%= qt($httplabel) %>) ;
+    }
+    catch (...)
+    {
+    }
+
+  <% } %>
+
+
+  SPLLOG(L_INFO, "Stopping the HTTP server", DBG_ASP);
+
+  _http_server.stop( ) ;
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & tuple, uint32_t port)
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  IplImage* cvimg = NULL ;
+  const IPort0Type & <%= $inTupleName %> = static_cast<const IPort0Type &>(tuple);
+  <%= copy2img(undef, "$inTupleName", "cvimg") %> ;
+
+  if (!cvimg)
+  {
+    THROW(SPLRuntimeOperator, "Unable to create image") ;
+  }
+  else
+  {
+    AutoMutex lck(_mutex) ;
+
+    if (_frame)
+    {
+      cvReleaseImage(&_frame) ;
+    }
+
+    _frame = cvimg ;
+    _frame_count++ ;
+
+    _new_frame.broadcast( ) ;
+  }
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+#if MHD_VERSION >= 0x00090000
+static ssize_t data_streamer(void *cls, uint64_t pos, char *buf, size_t max) ;
+#else
+static int data_streamer(void *cls, uint64_t pos, char *buf, int max) ;
+#endif
+
+static void terminate_http_request(void * cls) ;
+
+struct data_streamer_t
+{
+  int fd ;
+  int tmp_fd ;
+  std::string tmp_name ;
+  std::string name ;
+  SPL::Mutex* mutex ;
+  uint64_t* frame_count ;
+  SPL::CV* cv ;
+  IplImage** frame ;
+  double stat_time ;
+  uint64_t stat_bytes ;
+  uint64_t stat_frames ;
+  uint64_t stat_frame_start ;
+  uint64_t req_number ;
+  bool volatile * terminate ;
+} ;
+
+void MY_OPERATOR::streamData(struct MHD_Connection* connection,
+                             const char* url,
+                             const char* method,
+                             void* data)
+{
+  SPLLOG(L_DEBUG, "Entering " <%=qt($opername."::streamData") %>, DBG_ASP);
+
+  SPLLOG(L_INFO, "HTTP Request: url=[" << url << "] meth=[" << method << "]", DBG_ASP) ;
+
+  if (strcmp(url, "/") != 0)
+  {
+    SSTRING(page,
+            "<html><head><title>ERROR</title></head>"
+            "<body><h1>Invalid URL</h1>"
+            "</body></html>") ;
+
+    _http_server.returnPage(connection, page, 404) ;
+    return ;
+  }
+
+  AutoMutex lck(_mutex) ;
+
+  unsigned int current_req = _request_count ;
+  _request_count++ ;
+
+  char tmpl[] = "/tmp/mjepgstreamer.XXXXXX" ;
+  int fd = mkstemp(tmpl) ;
+
+  if (fd < 0)
+  {
+    SSTRING(page,
+            "<html><head><title>ERROR</title></head>"
+            "<body><h1>Unable to open tmp file</h1>"
+            "</body></html>") ;
+
+    _http_server.returnPage(connection, page, 404) ;
+    return ;
+  }
+
+  SSTRING(filename, "/dev/shm/image." << (tmpl + 5) << ".jpg") ;
+  SPLLOG(L_DEBUG, "Saving image to " << QT(filename), DBG_ASP) ;
+
+  struct MHD_Response * response = NULL ;
+  struct data_streamer_t* f = new struct data_streamer_t ;
+
+  f->terminate = &_terminate ;
+  f->name = filename ;
+  f->tmp_fd = fd ;
+  f->tmp_name = tmpl ;
+  f->fd = -2 ;
+  f->mutex = &_mutex ;
+  f->frame_count = &_frame_count ;
+  f->cv = &_new_frame ;
+  f->frame = &_frame ;
+  f->req_number = current_req ;
+  f->stat_time = 0 ;
+  f->stat_bytes = 0 ;
+  f->stat_frames = 0 ;
+  f->stat_frame_start = 0 ;
+
+  response = MHD_create_response_from_callback(MHD_SIZE_UNKNOWN,
+                                               32 * 1024,     /* 32k page size */
+                                               &data_streamer,
+                                               f,
+                                               terminate_http_request) ;
+
+  MHD_add_response_header(response, "Content-Type", "multipart/x-mixed-replace;boundary=" BOUNDARY);
+
+  int ret = MHD_queue_response(connection, 200, response);
+
+  MHD_destroy_response(response);
+
+  if (ret != MHD_YES)
+  {
+    SPLLOG(L_ERROR, "MHD_queue_response failed", DBG_ASP) ;
+  }
+  else
+  {
+    SPLLOG(L_INFO, "Starting streaming using file " << f->name, DBG_ASP) ;
+  }
+
+  SPLLOG(L_DEBUG, "Exiting " <%=qt($opername."::streamData") %>, DBG_ASP);
+}
+
+#if MHD_VERSION >= 0x00090000
+static ssize_t data_streamer(void *cls, uint64_t pos, char *buf, size_t max)
+#else
+static int data_streamer(void *cls, uint64_t pos, char *buf, int max)
+#endif
+{
+  struct data_streamer_t* f = (struct data_streamer_t*)cls ;
+
+  if (*(f->terminate))
+  {
+    SPLLOG(L_INFO, "terminate is set, stopping data streaming", DBG_ASP) ;
+
+    return -1 ;
+  }
+
+  if (f->fd == -2)
+  {
+    f->fd = -1 ;
+    f->stat_time = gettime( ) ;
+
+    {
+      AutoMutex lck(*f->mutex) ;
+      f->stat_frame_start = *(f->frame_count) ;
+    }
+
+    return snprintf(buf, max, "--" BOUNDARY "\r\n") ;
+  }
+
+  if (f->fd == -1)
+  {
+    SPLLOG(L_DEBUG, "getting new frame", DBG_ASP) ;
+
+    int rc = 0 ;
+
+    {
+      AutoMutex lck(*f->mutex) ;
+
+      f->cv->wait(*f->mutex) ;
+
+      try
+      {
+        rc = cvSaveImage(f->name.c_str( ), *f->frame) ;
+      }
+      catch(...)
+      {
+      }
+    }
+
+    if (!rc)
+    {
+      SPLLOG(L_ERROR, "Unable to save frame to disk: " << f->name, DBG_ASP) ;
+      return -1 ;
+    }
+
+    struct stat st ;
+    if (stat(f->name.c_str( ), &st))
+    {
+      int e = errno ;
+      SPLLOG(L_ERROR, "Unable to stat frame on disk: " << dpssupport::format::ErrnoFormat(e), DBG_ASP) ;
+      return -1 ;
+    }
+
+    int new_fd = open(f->name.c_str( ), O_RDONLY, 0400) ;
+
+    if (new_fd < 0)
+    {
+      int e = errno ;
+      SPLLOG(L_ERROR, "Unable to open frame on disk: " << dpssupport::format::ErrnoFormat(e), DBG_ASP) ;
+      return -1 ;
+    }
+
+    f->fd = new_fd ;
+    f->stat_bytes += st.st_size ;
+    f->stat_frames++ ;
+
+    return snprintf(buf, max,
+                    "Content-Type: image/jpeg\r\n"
+                    "Content-Length: %"PRIu64"\r\n"
+                    "\r\n",
+                    (uint64_t)st.st_size) ;
+  }
+
+  ssize_t s = read(f->fd, buf, max) ;
+
+  SPLLOG(L_DEBUG, "file_reader: " << s, DBG_ASP) ;
+
+  if (s <= 0)
+  {
+    close(f->fd) ;
+    f->fd = -1 ;
+
+    if (f->stat_time + STAT_INTERVAL <= gettime( ))
+    {
+      double streamed_ratio = 0 ;
+
+      {
+        AutoMutex lck(*f->mutex) ;
+
+        streamed_ratio = (double)f->stat_frames / (double)(*(f->frame_count) - f->stat_frame_start) ;
+        f->stat_frame_start = *(f->frame_count) ;
+      }
+
+      SPLLOG(L_DEBUG, "Streaming to connection #" << f->req_number << " at"
+             << dpssupport::format::Format(" %.1f KB/s", ((double)f->stat_bytes / 1024.0) / (gettime( ) - f->stat_time))
+             << dpssupport::format::Format(" %.1f fps/s", (double)f->stat_frames / (gettime( ) - f->stat_time))
+             << dpssupport::format::Format(" %.1f%% frame missed", 100.0 * (1.0 - streamed_ratio)), DBG_ASP) ;
+
+      f->stat_time = gettime( ) ;
+      f->stat_bytes = 0 ;
+      f->stat_frames = 0 ;
+    }
+
+    return snprintf(buf, max, "\r\n--" BOUNDARY "\r\n") ;
+  }
+  else
+  {
+    return s ;
+  }
+}
+
+static void terminate_http_request(void * cls)
+{
+  struct data_streamer_t* f = (struct data_streamer_t*)cls ;
+
+  SPLLOG(L_INFO, "Freeing http request " << f->name, DBG_ASP) ;
+
+  unlink(f->name.c_str( )) ;
+  close(f->tmp_fd) ;
+  unlink(f->tmp_name.c_str( )) ;
+
+  delete f ;
+}
+
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

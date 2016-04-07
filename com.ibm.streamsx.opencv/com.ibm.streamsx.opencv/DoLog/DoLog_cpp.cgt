@@ -1,0 +1,169 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+#include <opencv.h>
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+my $inTupleName = $model->getInputPortAt(0)->getCppTupleName(); 
+
+my $invert = get_param($model, "invert", 0);
+
+%>
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR()
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+static void doLog(IplImage* img)
+{
+  uint8_t* ptr = (uint8_t*)(img->imageData) ;
+
+  for(int y=0; y<img->height; y++)
+  {
+    for(int x=0; x< img->width; x++)
+    {
+      double d = ptr[x] ;
+
+      <% if ($invert) { %>
+
+        d = 255.0 - (std::log(255.0 - d) * (255.0 / std::log(255.0))) ;
+
+        <% } else { %>
+
+        d = std::log(d) * (255.0 / std::log(255.0)) ;
+
+        <% } %> ;
+
+      int32_t v = (int32_t)nearbyint(d) ;
+
+      if (v < 0)
+      {
+        v = 0 ;
+      }
+
+      if (v > 255)
+      {
+        v = 255 ;
+      }
+
+      ptr[x] = (uint8_t)v ;
+    }
+
+    ptr += img->widthStep ;
+  }
+}
+
+// Tuple processing for non-mutating ports
+void MY_OPERATOR::process(Tuple const & tuple, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  IplImage* img = NULL ;
+  const IPort0Type & <%= $inTupleName %> = static_cast<const IPort0Type &>(tuple);
+  <%= copy2img(undef, "$inTupleName", "img") %> ;
+
+  if (!img)
+  {
+    THROW(SPLRuntimeOperator, "Unable to create images") ;
+  }
+
+  if (img->nChannels == 1)
+  {
+    doLog(img) ;
+  }
+  else
+  {
+    IplImage* img_ch[4] = {NULL, NULL, NULL, NULL} ;
+
+    for(int c=0 ;c < img->nChannels; c++)
+    {
+      img_ch[c] = cvCreateImage(cvSize(img->width, img->height),
+                                img->depth, 1) ;
+    }
+
+    cvSplit(img, img_ch[0], img_ch[1], img_ch[2], img_ch[3]) ;
+
+    for(int c=0 ;c < img->nChannels; c++)
+    {
+      doLog(img_ch[c]) ;
+    }
+
+    cvMerge(img_ch[0], img_ch[1], img_ch[2], img_ch[3], img) ;
+
+    for(int c=0 ;c < img->nChannels; c++)
+    {
+      cvReleaseImage(&img_ch[c]) ;
+    }
+  }
+
+  OPort0Type otuple;
+  <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+  <%= copy2tuple(undef, "img", "otuple") %>;
+  cvReleaseImage(&img) ;
+
+  submit(otuple, 0);
+  
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+// Punctuation processing
+void MY_OPERATOR::process(Punctuation const & punct, uint32_t port)
+{
+  SPLLOG(L_TRACE, "Entering " <%= qt($opername . "::process Punctuation") %>, DBG_ASP);
+
+  submit(punct, 0) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%= qt($opername."::process Punctuation") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

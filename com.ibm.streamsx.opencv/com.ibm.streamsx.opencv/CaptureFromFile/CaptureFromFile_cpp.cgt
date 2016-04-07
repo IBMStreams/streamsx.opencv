@@ -1,0 +1,258 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+#include <opencv.h>
+#include <sys/time.h>
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind(); 
+
+###my $filename = get_param($model, "file", undef);
+my $filename = $model->getParameterByName("file")->getValueAt(0)->getCppExpression();
+
+my $frame_rate = get_param($model, "rate", undef);
+
+my $repeat = get_param($model, "repeat", 0);
+%>
+
+using namespace std;
+
+#define DBG_ASP "opencv"
+
+typedef union {
+
+  unsigned long l ;
+  unsigned char c[8] ;
+
+} long2char ;
+
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR() :
+    _capture(NULL),
+    _inter_frame_delay(0),
+    _repeat(0)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  _repeat = <%= $repeat %> ;
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  if (_capture)
+  {
+    cvReleaseCapture(&_capture) ;
+  }
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  string filename(<%=$filename%>) ;
+
+  SPLLOG(L_INFO, "Opening video file " << QT(filename), DBG_ASP);
+
+  try
+  {
+    _capture = cvCreateFileCapture(filename.c_str( )) ;
+  }
+  catch(cv::Exception& ex)
+  {
+    THROW(SPLRuntimeOperator, "cvCreateFileCapture failed: " << ex) ;
+  }
+
+  if (_capture == NULL)
+  {
+    THROW(SPLRuntimeOperator, "Unable to open video file " << QT(filename)) ;
+  }
+
+  double fps = cvGetCaptureProperty(_capture, CV_CAP_PROP_FPS) ;
+
+  <% if (defined $frame_rate)
+     { %>
+
+       if (<%= $frame_rate %> > 0)
+       {
+
+         _inter_frame_delay = 1000 / <%= $frame_rate %> ;
+
+       }
+       else
+       {
+
+         _inter_frame_delay = 0 ;
+
+       }
+      <% }
+     else
+     { %>
+
+       if (fps >= 1.0)
+       {
+         _inter_frame_delay = (uint32_t)(1000.0 / fps) ;
+       }
+       else
+       {
+         _inter_frame_delay = 1000 / 20 ;
+       }
+  <% } %>
+
+  SPLLOG(L_INFO, "Inter frame delay: " << _inter_frame_delay << "ms", DBG_ASP);
+
+  CvSize size = cvSize((int)cvGetCaptureProperty(_capture, CV_CAP_PROP_FRAME_WIDTH),
+                       (int)cvGetCaptureProperty(_capture, CV_CAP_PROP_FRAME_HEIGHT)) ;
+
+  SPLLOG(L_INFO, "Frame size: " << size.width << "x" << size.height, DBG_ASP);
+
+  long2char l2c ;
+  l2c.l = (unsigned long)cvGetCaptureProperty(_capture, CV_CAP_PROP_FOURCC) ;
+
+#define M(c) (((c) < 32 || (c) > 127) ? '?' : (char)c)
+
+  SPLLOG(L_INFO, "Fourcc: " << M(l2c.c[0]) << M(l2c.c[1]) << M(l2c.c[2]) << M(l2c.c[3]), DBG_ASP);
+
+#undef M
+
+  double frame_cnt = cvGetCaptureProperty(_capture, CV_CAP_PROP_FRAME_COUNT) ;
+  SPLLOG(L_INFO, "Frame count: " << frame_cnt, DBG_ASP);
+
+  SPLLOG(L_INFO, "Frame/s: " << fps, DBG_ASP);
+
+  createThreads(1); // Create source thread
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+    SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+    SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+static uint64_t now_ms( )
+{
+  struct timeval tv ;
+  gettimeofday(&tv, NULL) ;
+  uint64_t res = tv.tv_sec ;
+  res = res * 1000LL ;
+  res = res + (tv.tv_usec / 1000) ;
+  return res ;
+}
+
+// Processing for source and threaded operators   
+void MY_OPERATOR::process(uint32_t idx)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  IplImage* frame ;
+  uint64_t frame_count = 0 ;
+
+  while (!getPE().getShutdownRequested( ))
+  {
+    uint64_t t1 = now_ms( ) ;
+
+    SPLLOG(L_TRACE, "Preparing to read frame #" << frame_count, DBG_ASP);
+
+    frame = cvQueryFrame(_capture) ;
+    if (frame == NULL)
+    {
+      string filename(<%=$filename%>) ;
+
+      if (frame_count == 0)
+      {
+        THROW(SPLRuntimeOperator, "Unable to obtain first frame from video file " << QT(filename)) ;
+      }
+
+      submit(Punctuation::WindowMarker, 0) ;
+
+      if (_repeat)
+      {
+        cvReleaseCapture(&_capture) ;
+
+        try
+        {
+          _capture = cvCreateFileCapture(filename.c_str( )) ;
+        }
+        catch(cv::Exception& ex)
+        {
+          THROW(SPLRuntimeOperator, "cvCreateFileCapture failed: " << ex) ;
+        }
+
+        if (_capture == NULL)
+        {
+          THROW(SPLRuntimeOperator, "Unable to open video file " << QT(filename)) ;
+        }
+
+        frame = cvQueryFrame(_capture) ;
+        if (frame == NULL)
+        {
+          THROW(SPLRuntimeOperator, "Unable to obtain first frame from video file " << QT(filename)) ;
+        }
+      }
+      else
+      {
+        SPLLOG(L_INFO, "No more frame to capture", DBG_ASP);
+        return ;
+      }
+    }
+
+    OPort0Type otuple;
+    <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+    <%= copy2tuple(undef, "frame", "otuple") %>;
+
+    submit(otuple, 0);
+
+    frame_count++ ;
+
+    unsigned long long t2 = now_ms( ) ;
+
+    if (_inter_frame_delay > 0)
+    {
+      if (t2 - t1 < _inter_frame_delay)
+      {
+        int d = (_inter_frame_delay - (t2 - t1)) ;
+        SPLLOG(L_TRACE, "Sleeping " << d << "ms before the next frame", DBG_ASP) ;
+        usleep(1000 * d) ;
+      }
+      else
+      {
+        SPLLOG(L_TRACE, "We're running too slow!! " << t2 - t1 << "ms elapsed since last frame", DBG_ASP) ;
+      }
+    }
+  }
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+

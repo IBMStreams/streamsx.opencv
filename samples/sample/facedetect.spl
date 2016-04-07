@@ -1,0 +1,73 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012, 2013
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite facedetect {
+
+    graph
+	
+    stream<IplImage> video = CaptureFromCAM() {}
+  	
+    stream<IplImage,BoxList> facesAndBoxes = FaceDetection(video) {
+    param
+        facemodel: getEnvironmentVariable("OPENCV_INSTALL_PATH", "/usr/local") + "/share/OpenCV/haarcascades/haarcascade_frontalface_alt.xml";
+        scale: 2.0; }
+
+    stream<IplImage> boxedfaces = DrawRectangles(facesAndBoxes) {
+    param
+        color: [ 255, 255, 100 ];
+        thickness: 3; }
+
+    stream<IplImage> statboxedfaces = Stats(boxedfaces) {}
+
+    () as Sink1 = X11Viewer(statboxedfaces) {}
+
+    () as Sink2 = X11Viewer(statboxedfaces) {
+    param
+        title: "Streams OpenCV 'facedetect' sample application"; }
+
+    stream<CroppedIplImage> croppedfaces = CropBoxes(facesAndBoxes) { }
+    stream<CroppedIplImage> croppedfaces0 as Out = Functor(croppedfaces) { output Out: ipl_data = (list<uint8>)[]; }
+    () as croppedfacesSink = FileSink(croppedfaces0) { param file: "./debug.facedetect.croppedfaces.out"; format: txt; hasDelayField: true; flush: 1u; writePunctuations: true; }
+ 
+    stream<int32 w, int32 h, list<uint8> d> cf = Functor(croppedfaces) {
+    output cf: w = ipl_width, h = ipl_height, d = ipl_data; }
+
+    () as Sink3 = X11Viewer(cf as In) {
+    param
+        title: "face"; 
+	widthAttribute: w; 
+	heightAttribute: h;
+	dataAttribute: d; }
+    // config threadedPort: queue(In, Sys.Wait, 10); }
+
+    stream<CroppedIplImage> sampledfaces = SkipFrame(croppedfaces) {
+    param 
+      	style: "fixed"; 
+      	frame: 10; }
+
+    stream<CroppedIplImage> sampledfaces0 as Out = Functor(sampledfaces) { output Out: ipl_data = (list<uint8>)[]; }
+    () as sampledfacesSink = FileSink(sampledfaces0) { param file: "./debug.facedetect.sampledfaces.out"; format: txt; hasDelayField: true; flush: 1u; writePunctuations: true; }
+
+    stream<rstring path> savedfaces = SaveImage(sampledfaces) {     
+    param   
+		file: "./debug.face_" + (rstring)ipl_width + "x" + (rstring)ipl_height + ".jpg";
+	        increment: true; }
+
+    () as Sink4 = FileSink(savedfaces){
+    param
+		file: "./debug.facedetect.savedfaces.out";
+		format: txt; 
+		hasDelayField: true; 
+		flush: 1u; 
+		writePunctuations: true; }
+
+}

@@ -1,0 +1,171 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012, 2013
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+namespace sample;
+
+use com.ibm.streamsx.opencv::*;
+
+composite demo3b 
+{
+  graph
+    stream<IplImage> vid0 = CaptureFromFile() {
+      param
+        file : dataDirectory() + "/sample_contour3.mpg";
+        repeat : 1;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> bw_vid0 = CvtColor(vid0) {
+      param
+        cvt_param : "CV_BGR2GRAY"; /* Constants for color conversion (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+//###########################################
+
+    stream<int32 trackbar_threshold> tb_low = TrackBar() {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+        name : "low";
+        title : "TrackBar";
+        value : 125;
+        max : 255;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<int32 trackbar_threshold> tb_high = TrackBar() {
+      param
+        display : getEnvironmentVariable("DISPLAY");
+        name : "high";
+        title : "TrackBar";
+        value : 255;
+        max : 255;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> th_low_vid0 = Threshold(bw_vid0; tb_low) {
+      param
+        max : 255;
+        threshold_type : "CV_THRESH_TOZERO"; /* Types of thresholding (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> th_high_vid0 = Threshold(bw_vid0; tb_high) {
+      param
+        max : 255;
+        threshold_type : "CV_THRESH_BINARY"; /* Types of thresholding (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> final = Apply2(th_low_vid0; th_high_vid0) {
+      param
+        transform : "cvOr"; /* The CV "in place" function to apply, suitable functions are "cvOr", "cvAnd", "cvAbsDiff", etc. */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> cntr = DrawContours(final) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp1 = MJPEGStreamer(final) {
+      param
+        httpport : 9001;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp2 = MJPEGStreamer(cntr) {
+      param
+        httpport : 9002;
+      config
+        placement : partitionColocation("P1");
+    }
+
+//###########################################
+
+    stream<IplImage> smooth_vid0 = Smooth(bw_vid0) {
+      param
+        iteration : 4;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> th_low_s_vid0 = Threshold(smooth_vid0; tb_low) {
+      param
+        max : 255;
+        threshold_type : "CV_THRESH_TOZERO"; /* Types of thresholding (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> th_high_s_vid0 = Threshold(smooth_vid0; tb_high) {
+      param
+        max : 255;
+        threshold_type : "CV_THRESH_BINARY"; /* Types of thresholding (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> final_s = Apply2(th_low_s_vid0; th_high_s_vid0) {
+      param
+        transform : "cvOr"; /* The CV "in place" function to apply, suitable functions are "cvOr", "cvAnd", "cvAbsDiff", etc. */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> cntr_s = DrawContours(final_s) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp3 = MJPEGStreamer(cntr_s) {
+      param
+        httpport : 9003;
+      config
+        placement : partitionColocation("P1");
+    }
+
+//###########################################
+
+    stream<IplImage> cntr_rgb = CvtColor(cntr_s) {
+      param
+        channels : 3;
+        cvt_param : "CV_GRAY2BGR"; /* Constants for color conversion (cv.h) (quoted) */
+      config
+        placement : partitionColocation("P1");
+    }
+
+    stream<IplImage> src_n_cntr = Collage(vid0; cntr_rgb) {
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp4 = MJPEGStreamer(src_n_cntr) {
+      param
+        httpport : 9004;
+      config
+        placement : partitionColocation("P1");
+    }
+
+    () as SinkOp5 = SaveToFile(src_n_cntr) {
+      param
+        filename : dataDirectory() + "/demo3b-out.avi";
+        rate : 15;
+        fourcc : "mjpg";
+      config
+        placement : partitionColocation("P1");
+    }
+}

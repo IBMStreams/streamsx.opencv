@@ -1,0 +1,257 @@
+/*
+ * # Licensed Materials - Property of IBM
+ * # Copyright IBM Corp. 2012
+ * # US Government Users Restricted Rights - Use, duplication or
+ * # disclosure restricted by GSA ADP Schedule Contract with
+ * # IBM Corp.
+ */
+
+/* Additional includes go here */
+
+<%SPL::CodeGen::implementationPrologue($model);%>
+
+<%
+# Set up commonly used variables, includes, and requires
+my $modelroot = $model->getContext()->getOperatorDirectory();
+unshift @INC, dirname($modelroot) . "/Common";
+
+use strict;
+require opencv;
+require util;
+import opencv;
+import util;
+
+my $opername = $model->getContext()->getKind();
+
+my $url = get_param($model, "url", undef) ;
+my $format = get_param($model, "format", "jpg") ;
+my $rate = get_param($model, "rate", 15) ;
+my $die_on_error = get_param($model, "dieonerror", 1) ;
+
+%>
+
+#include <curl/curl.h>
+#include <format.h>
+
+#undef LOG_INFO // conflict with syslog
+#include <opencv.h>
+#include <opencv/highgui.h>
+
+using namespace std;
+using namespace dpssupport::format;
+
+#define DBG_ASP "opencv"
+
+// Constructor
+MY_OPERATOR::MY_OPERATOR() 
+  : MY_BASE_OPERATOR(),
+  _curl_handle(NULL)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::".$opername) %>, DBG_ASP);
+
+  _inter_frame_delay = 1000 / <%= $rate %> ;
+  _die_on_error = (<%= $die_on_error %> ? true : false) ;
+
+  SPLLOG(L_INFO, "Inter frame delay: " << _inter_frame_delay, DBG_ASP) ;
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::".$opername) %>, DBG_ASP);
+}
+
+// Destructor
+MY_OPERATOR::~MY_OPERATOR() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+
+  curl_easy_cleanup(_curl_handle) ; 
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::~".$opername) %>, DBG_ASP);
+}
+
+// Notify port readiness
+void MY_OPERATOR::allPortsReady() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+
+  SPLLOG(L_INFO, "Initializing CURL handle", DBG_ASP) ;
+
+  _curl_handle = curl_easy_init( ) ;
+
+  if (!_curl_handle)
+  {
+    THROW(SPLRuntimeOperator, "curl_easy_init failed") ;
+  }
+
+  const char* url = <%= qt($url) %>;
+
+  SPLLOG(L_INFO, "Preparing to fetch images from " << url, DBG_ASP);
+ 
+  if (curl_easy_setopt(_curl_handle, CURLOPT_URL, url) != 0)
+  {
+    THROW(SPLRuntimeOperator, "curl_easy_setopt failed") ;
+  }
+
+  createThreads(1); // Create source thread
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::allPortsReady") %>, DBG_ASP);
+}
+ 
+// Notify pending shutdown
+void MY_OPERATOR::prepareToShutdown() 
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::prepareToShutdown") %>, DBG_ASP);
+}
+
+static uint64_t now_ms( )
+{
+  struct timeval tv ;
+  gettimeofday(&tv, NULL) ;
+  uint64_t res = tv.tv_sec ;
+  res = res * 1000LL ;
+  res = res + (tv.tv_usec / 1000) ;
+  return res ;
+}
+
+// Processing for source and threaded operators   
+void MY_OPERATOR::process(uint32_t idx)
+{
+  SPLLOG(L_TRACE, "Entering " <%=qt($opername."::process") %>, DBG_ASP);
+
+  uint64_t frame_count = 0 ;
+
+  while (!getPE().getShutdownRequested( ))
+  {
+    uint64_t t1 = now_ms( ) ;
+
+    SPLLOG(L_TRACE, "Preparing to read frame #" << frame_count, DBG_ASP);
+
+    SSTRING(filename, "/dev/shm/frame." << gettid( ) << "." << frame_count << "." << <%= qt($format) %>) ;
+    FILE* f = fopen(filename.c_str( ), "w") ;
+
+    if (f == NULL)
+    {
+      int e = errno ;
+      THROW(SPLRuntimeOperator, "Unable to open " << QT(filename) << ": " << ErrnoFormat(e)) ;
+    }
+
+    CURLcode cc = curl_easy_setopt(_curl_handle, CURLOPT_WRITEDATA, f) ;
+    if (cc != 0)
+    {
+      fclose(f) ;
+      unlink(filename.c_str( )) ;
+
+      THROW(SPLRuntimeOperator, "curl_easy_setopt failed: " << curl_easy_strerror(cc)) ;
+    }
+
+    cc = curl_easy_perform(_curl_handle) ;
+    fclose(f) ;
+
+    if (cc != 0)
+    {
+      unlink(filename.c_str( )) ;
+
+      if (_die_on_error)
+      {
+        THROW(SPLRuntimeOperator, "curl_easy_perform failed: " << curl_easy_strerror(cc)) ;
+      }
+      else
+      {
+        SPLLOG(L_ERROR, "curl_easy_perform failed: " << curl_easy_strerror(cc), DBG_ASP) ;
+      }
+    }
+    else
+    {
+      long http_code = 0 ;
+
+      cc = curl_easy_getinfo(_curl_handle, CURLINFO_RESPONSE_CODE, &http_code) ;
+      if (cc != 0)
+      {
+        unlink(filename.c_str( )) ;
+        THROW(SPLRuntimeOperator, "curl_easy_getinfo failed: " << curl_easy_strerror(cc)) ;
+      }
+
+      SPLLOG(L_DEBUG, "HTTP return code: " << http_code, DBG_ASP) ;
+
+      if (http_code != 200)
+      {
+        unlink(filename.c_str( )) ;
+        if (_die_on_error)
+        {
+          THROW(SPLRuntimeOperator, "Fetching URL failed with code " << http_code) ;
+        }
+        else
+        {
+          SPLLOG(L_ERROR, "Fetching URL failed with code " << http_code, DBG_ASP) ;
+        }
+      }
+      else
+      {
+        double dwnl_size = 0.0 ;
+
+        cc = curl_easy_getinfo(_curl_handle, CURLINFO_SIZE_DOWNLOAD, &dwnl_size) ;
+        if (cc != 0)
+        {
+          THROW(SPLRuntimeOperator, "curl_easy_getinfo failed: " << curl_easy_strerror(cc)) ;
+        }
+
+        SPLLOG(L_DEBUG, "Download size: " << dwnl_size, DBG_ASP) ;
+
+        double dwnl_speed = 0.0 ;
+
+        cc = curl_easy_getinfo(_curl_handle, CURLINFO_SPEED_DOWNLOAD, &dwnl_speed) ;
+        if (cc != 0)
+        {
+          THROW(SPLRuntimeOperator, "curl_easy_getinfo failed: " << curl_easy_strerror(cc)) ;
+        }
+
+        SPLLOG(L_DEBUG, "Download speed: " << dwnl_speed / 1024.0 << "KB/s", DBG_ASP) ;
+
+        IplImage* frame = NULL ;
+        try
+        {
+          frame = cvLoadImage(filename.c_str( ) /*, CV_LOAD_IMAGE_UNCHANGED*/) ;
+        }
+        catch(cv::Exception& ex)
+        {
+          SPLLOG(L_ERROR, "cvLoadImage failed: " << ex, DBG_ASP) ;
+        }
+    
+        unlink(filename.c_str( )) ;
+    
+        if (!frame)
+        {
+          SPLLOG(L_ERROR, "Unable to load image from file " << QT(filename), DBG_ASP) ;
+        }
+        else
+        {
+          OPort0Type otuple ;
+          <%= SPL::CodeGen::getOutputTupleCppAssignments('otuple', $model->getOutputPortAt(0)) %>
+          <%= copy2tuple(undef, "frame", "otuple") %> ;
+          cvReleaseImage(&frame) ;
+          
+          submit(otuple, 0);
+        }
+        frame_count++ ;
+      }
+    }
+
+    unsigned long long t2 = now_ms( ) ;
+
+    if (t2 - t1 < _inter_frame_delay)
+    {
+      int d = (_inter_frame_delay - (t2 - t1)) ;
+      SPLLOG(L_TRACE, "Sleeping " << d << "ms before the next frame", DBG_ASP) ;
+      usleep(1000 * d) ;
+    }
+    else
+    {
+      SPLLOG(L_TRACE, "We're running too slow!! " << t2 - t1 << "ms elapsed since last frame", DBG_ASP) ;
+    }
+  }
+
+  SPLLOG(L_TRACE, "Exiting " <%=qt($opername."::process") %>, DBG_ASP);
+}
+
+<%SPL::CodeGen::implementationEpilogue($model);%>
+
