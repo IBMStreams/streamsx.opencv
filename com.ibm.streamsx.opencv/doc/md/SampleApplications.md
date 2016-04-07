@@ -7,7 +7,7 @@ All of the sample applications are compiled when the toolkit is [installed](Inst
 
         cd .../streams.opencv/com.ibm.streamsx.opencv
         make sample-application-name
-        ./output/sample-application-name/bin/standalone -t 1
+        ./output/sample-application-name/bin/standalone -t 3
 
 Below are descriptions of each sample application, including which operators it uses.
 

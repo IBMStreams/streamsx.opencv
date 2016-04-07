@@ -15,7 +15,12 @@
 <p>After <a href="InstallingToolkit.html">installing the OpenCV toolkit</a> and its dependencies, you can verify that its operators work correctly by running some of the <a href="SampleApplications.html">sample applications</a> that are included in the toolkit. The sample applications, which are compiled when you install the toolkit, illustrate how its <a href="OperatorsAndTypes.html">operators and types</a> can be used in Streams applications.</p>
 <p>If you have a graphical desktop (for example, the Gnome Desktop) on your machine, then you can use Streams Studio to view the source code for the sample applications and then launch them. Or if not, you can run some of the sample applications from a Linux command prompt, as shown in 'Verify the toolkit' below.</p>
 <p>To use the OpenV toolkit in your own applications, you need to add an SPL ’use’ statement at the beginning of your source code, and specify the directory containing the toolkit when compiling your source code, as shown in 'Use the toolkit with Streams' below.</p>
-<h2 id="verify-the-toolkit">Verify the toolkit</h2>
+<h2 id="set-environment-variables">set environment variables</h2>
+<p>The OpenCV toolkit requires that you set Linux environment variables to identify the directory where the FFmpeg and OpenCV libraries will be installed. You can set them by copying these lines into your ’$HOME/.bashrc’ script:</p>
+<pre><code>    export OPENCV_INSTALL_PATH=/usr/local
+    export LD_LIBRARY_PATH=$OPENCV_INSTALL_PATH/lib:$LD_LIBRARY_PATH </code></pre>
+<p>After changing your ’$HOME/.bashrc’ script, you should log off Linux and log back in, to ensure that the new environment variables are set in all shells, including your window manager.</p>
+<h2 id="verify-the-toolkit">verify the toolkit</h2>
 <p>If you have access to a graphical desktop on your machine, then you can verify that the OpenCV toolkit is installed properly by running the sample application <code>file.spl</code>. This application will open a window on the desktop and replay a short video in it:</p>
 <pre><code>   cd .../streamsx.opencv
    ./samples/output/file/bin/standalone -t 3</code></pre>
@@ -37,7 +42,7 @@
    ./samples/output/faces_edges_cam/bin/standalone -t 3 
    ./samples/output/faces_edges_file/bin/standalone -t 3 </code></pre>
 <p>There are many more sample applications included in the toolkit that illustrate how the operators can be used. Each sample application is described in <a href="SampleApplications.html">Sample Applications</a>.</p>
-<h2 id="use-the-toolkit-with-streams">Use the toolkit with Streams</h2>
+<h2 id="use-the-toolkit-with-streams">use the toolkit with Streams</h2>
 <p>All of the operators and types in this toolkit are defined in the Streams namespace ’com.ibm.streamsx.opencv’. To use them in an SPL application, include this statement at the top of your SPL or SPLMM source file:</p>
 <pre><code>    use com.ibm.streamsx.opencv::*;</code></pre>
 <p>If you compile your SPL applications with the <code>sc</code> command, then you will need to specify the location of the toolkit with the <code>-t</code> option, like this:</p>
@@ -64,7 +69,7 @@
 <li><p>navigate to the `.../streamsx.opencv‘ directory and click ’OK’</p></li>
 <li><p>select the project `com.ibm.streamsx.opencv‘ and click ’Finish’</p></li>
 </ul>
-<h2 id="use-the-toolkit-with-cameras">Use the toolkit with cameras</h2>
+<h2 id="use-the-toolkit-with-cameras">use the toolkit with cameras</h2>
 <p>You can use cameras that are attached directly to your machine with the toolkit.</p>
 <p>Linux represents cameras as devices named ‘/dev/videoX‘, where ’<em>X</em>’ is a positive integer. The camera number ’<em>X</em>’ is specified with the ’index’ parameter of the <code>CaptureFromCAM</code> operator.</p>
 <p>You can list the cameras attached to your machine with these commands:</p>
