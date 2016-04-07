@@ -17,21 +17,8 @@ The OpenCV toolkit should work on any machine that supports IBM Streams. It has 
 
 - IBM Streams, version 4.1.1
 
-install packages from RHEL or CentOS repositories
--------------------------------------------------
-
-The OpenCV toolkit depends upon many tools and libraries that are available as repository packages (RPMs) from RHEL or CentOS repositories. These packages can be installed with administrator tools such as ’yum’. This requires root privileges, which can be acquired temporarily with administrator tools such as ’sudo’.
-
-Most of the packages the toolkit depends upon are stored in the ’base’ repository, which install tools such as ’yum’ search by default. The remaining packages are stored in the ’epel (extra packages)’ repository, which is not searched by default.
-
-The ’yum’ tool will include the ’epel’ repository when it searches for repository packages if you first install the ’epel’ package. This requires root privileges. You can do this by entering these commands at a Linux command prompt:
-
-        wget http://download.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-5.noarch.rpm
-        sudo rpm -ivh epel-release-7-5.noarch.rpm
-
-You can install packages the OpenCV toolkit depends upon by entering this command at a Linux command prompt:
-
-        sudo yum install gcc-c++ bzip2-devel cmake libcurl-devel gtk2-devel jasper-devel libjpeg-devel libmicrohttpd-devel libpng-devel libsvm-devel libtiff-devel libv41-devel pkgconfig SDL-devel wget yasm zlib-devel pandoc
+set environment variables
+-------------------------
 
 The OpenCV toolkit requires that you set Linux environment variables to identify the directory where the FFmpeg and OpenCV libraries will be installed. You can set them by copying these lines into your ’$HOME/.bashrc’ script:
 
@@ -39,6 +26,22 @@ The OpenCV toolkit requires that you set Linux environment variables to identify
         export LD_LIBRARY_PATH=$OPENCV_INSTALL_PATH/lib:$LD_LIBRARY_PATH 
 
 After changing your ’$HOME/.bashrc’ script, you should log off Linux and log back in, to ensure that the new environment variables are set in all shells, including your window manager.
+
+install packages from RHEL or CentOS repositories
+-------------------------------------------------
+
+The OpenCV toolkit depends upon many tools and libraries that are available as repository packages (RPMs) from RHEL or CentOS repositories. These packages can be installed with administrator tools such as ’yum’. This requires 'root' privileges, which can be acquired temporarily with administrator tools such as ’sudo’.
+
+Most of the packages the toolkit depends upon are stored in the ’base’ repository, which administrator tools such as ’yum’ search by default. The remaining packages are stored in the ’epel (extra packages)’ repository, which is not searched by default.
+
+The ’yum’ tool will include the ’epel’ repository when it searches for repository packages if you first install the ’epel’ package. This requires 'root' privileges. You can do this by entering these commands at a Linux command prompt:
+
+        wget http://download.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-5.noarch.rpm
+        sudo rpm -ivh epel-release-7-5.noarch.rpm
+
+You can install packages the OpenCV toolkit depends upon by entering this command at a Linux command prompt:
+
+        sudo yum install gcc-c++ bzip2-devel cmake libcurl-devel gtk2-devel jasper-devel libjpeg-devel libmicrohttpd-devel libpng-devel libsvm-devel libtiff-devel libv41-devel pkgconfig SDL-devel wget yasm zlib-devel pandoc
 
 install GPU device drivers
 --------------------------
@@ -58,7 +61,7 @@ The FFmpeg library must be built and installed from source code. You can downloa
 
 - [http://ffmpeg.org/download.html](http://ffmpeg.org/download.html)
 
-After downloading the FFmpeg package you must unpack it, build the libraries, and install them. This requires root privileges.
+After downloading the FFmpeg package you must unpack it, build the libraries, and install them. This requires 'root' privileges.
 
 The FFmpeg library has many configuration options. In particular, support for various video codecs can be included or excluded by specifying additional options of the ’./configure’ command. You can display its options by entering these commands at a Linux prompt:
 
@@ -169,12 +172,12 @@ The OpenCV toolkit contains operators for IBM Streams and sample Streams applica
 
 You can download a package containing the OpenCV toolkit from:
 
-- https://github.com/IBMStreams/streamsx.opencv
+- http://ibmstreams.github.io/streamsx.opencv/
 
 After downloading the OpenCV toolkit package you must unpack it and build its library and sample applications. You can do this by entering these commands at a Linux prompt:
 
-        unzip streamsx.opencv-master.zip
-        mv streamsx.opencv-master streamsx.opencv               
+        unzip IBMStreams-streamsx.opencv-xxxxxxx.zip
+        mv streamsx.IBMStreams-streamsx.opencv-xxxxxxx streamsx.opencv               
         cd streamsx.opencv
         make
 
