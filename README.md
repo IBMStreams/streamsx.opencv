@@ -1,6 +1,6 @@
 ### streamsx.opencv
 
-The [OpenCV toolkit for IBM Streams](https://github.com/IBMStreams/streamsx.opencv) allows applications to ingest and process images with the [OpenCV library](http://opencv.org/).
+The [OpenCV toolkit for IBM Streams](https://github.com/IBMStreams/streamsx.opencv) allows applications to ingest and process images with the [OpenCV (Open Computer Vision)](http://opencv.org/) library.
 
 For information about the toolkit, please see [http://ibmstreams.github.io/streamsx.opencv/](http://ibmstreams.github.io/streamsx.opencv/).
 
