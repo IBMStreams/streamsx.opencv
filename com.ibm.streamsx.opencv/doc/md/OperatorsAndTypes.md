@@ -1669,3 +1669,7 @@ Used in these sample applications:
 -   `threshold.spl`
 -   `url.spl`
 -   `xcombine.spl`
+
+----
+
+&copy; Copyright 2012, 2016, International Business Machines Corporation, All Rights Reserved 

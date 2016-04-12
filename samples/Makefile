@@ -1,8 +1,5 @@
-# Licensed Materials - Property of IBM
-# Copyright IBM Corp. 2012
-# US Government Users Restricted Rights - Use, duplication or
-# disclosure restricted by GSA ADP Schedule Contract with
-# IBM Corp.
+# Copyright (C) 2012, 2016, International Business Machines Corporation
+# All Rights Reserved
 
 # To build a composite, specify its name:
 #    make cam

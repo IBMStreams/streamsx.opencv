@@ -124,3 +124,7 @@ The camera’s frame size and rate can be configured with the `width`, `height`,
        v4l2-ctl -d/dev/videoX  --list-formats-ext
 
 If your camera supports both the ’YUYV’ and ’MJPG’ pixel formats, use the frame sizes and rates listed under the ’MJPG’ pixel formats with the `CaptureFromCAM` operator.
+
+----
+
+&copy; Copyright 2012, 2016, International Business Machines Corporation, All Rights Reserved 

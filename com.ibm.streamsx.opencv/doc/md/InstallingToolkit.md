@@ -188,3 +188,7 @@ The OpenCV toolkit documentation is available in 'markdown' and HTML formats in 
 - streamsx.opencv/com.ibm.streamsx.opencv/doc/md/index.md
 
 - [streamsx.opencv/com.ibm.streamsx.opencv/doc/html/index.html](index.html)
+
+----
+
+&copy; Copyright 2012, 2016, International Business Machines Corporation, All Rights Reserved 
