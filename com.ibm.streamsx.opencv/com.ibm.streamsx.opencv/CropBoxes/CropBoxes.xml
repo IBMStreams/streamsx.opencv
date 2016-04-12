@@ -1,11 +1,8 @@
-<?xml version="1.0" encoding="UTF-8"?>     
-<!--                                                             -->
-<!-- Licensed Materials - Property of IBM                        -->
-<!-- Copyright IBM Corp. 2012, 2013                              -->
-<!-- US Government Users Restricted Rights - Use, duplication or -->
-<!-- disclosure restricted by GSA ADP Schedule Contract with     -->
-<!-- IBM Corp.                                                   -->
-<!--                                                             -->
+<?xml version="1.0" ?>
+<!--
+Copyright (C) 2012, 2016, International Business Machines Corporation
+All Rights Reserved
+-->
 <operatorModel xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.ibm.com/xmlns/prod/streams/spl/operator" xmlns:cmn="http://www.ibm.com/xmlns/prod/streams/spl/common" xsi:schemaLocation="http://www.ibm.com/xmlns/prod/streams/spl/operator operatorModel.xsd">
   <cppOperatorModel>
     <context>
