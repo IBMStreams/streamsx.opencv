@@ -845,3 +845,7 @@ toolkit operators used:
 - `CombineImg`
 - `Resize`
 - `X11Viewer`
+
+----
+
+&copy; Copyright 2012, 2016, International Business Machines Corporation, All Rights Reserved 
