@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="pandoc">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title></title>
+  <style type="text/css">code{white-space: pre;}</style>
+  <!--[if lt IE 9]>
+    <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <![endif]-->
+</head>
+<body>
+<h1 id="installing-the-opencv-toolkit">Installing the OpenCV Toolkit</h1>
+<p>The OpenCV toolkit for IBM Streams depends upon the <a href="http://opencv.org/">OpenCV (Open Computer Vision)</a> library, which depends upon the <a href="http://ffmpeg.org/">FFmpeg (Fast Forward MPEG)</a> library, which depends upon several other libraries. The toolkit must be installed on the machine where applications will be developed. The libraries must be installed on each machine where applications will be developed or executed.</p>
+<p>This section contains instructions for installing several libraries from RHEL or CentOS repositories, then building the FFmpeg and OpenCV libraries from source code, and then finally building the toolkit.</p>
+<p>Note: The libraries the toolkit depends upon are covered by a variety of ’open source’ licenses. You should read the license files and check with your legal department before downloading them to ensure you comply with their terms.</p>
+<p>The OpenCV toolkit should work on any machine that supports IBM Streams. It has been tested with this environment:</p>
+<ul>
+<li><p>RHEL or CentOS (64-bit), version 7.1</p></li>
+<li><p>FFmpeg library, version 3.0.1</p></li>
+<li><p>OpenCV library, version 3.1.0</p></li>
+<li><p>IBM Streams, version 4.1.1</p></li>
+</ul>
+<h2 id="set-environment-variables">set environment variables</h2>
+<p>The OpenCV toolkit requires that you set Linux environment variables to identify the directory where the FFmpeg and OpenCV libraries will be installed. You can set them by copying these lines into your ’$HOME/.bashrc’ script:</p>
+<pre><code>    export OPENCV_INSTALL_PATH=/usr/local
+    export LD_LIBRARY_PATH=$OPENCV_INSTALL_PATH/lib:$LD_LIBRARY_PATH </code></pre>
+<p>After changing your ’$HOME/.bashrc’ script, you should log off Linux and log back in, to ensure that the new environment variables are set in all shells, including your window manager.</p>
+<h2 id="install-packages-from-rhel-or-centos-repositories">install packages from RHEL or CentOS repositories</h2>
+<p>The OpenCV toolkit depends upon many tools and libraries that are available as repository packages (RPMs) from RHEL or CentOS repositories. These packages can be installed with administrator tools such as ’yum’. This requires 'root' privileges, which can be acquired temporarily with administrator tools such as ’sudo’.</p>
+<p>Most of the packages the toolkit depends upon are stored in the ’base’ repository, which administrator tools such as ’yum’ search by default. The remaining packages are stored in the ’epel (extra packages)’ repository, which is not searched by default.</p>
+<p>The ’yum’ tool will include the ’epel’ repository when it searches for repository packages if you first install the ’epel’ package. This requires 'root' privileges. You can do this by entering these commands at a Linux command prompt:</p>
+<pre><code>    wget http://download.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-5.noarch.rpm
+    sudo rpm -ivh epel-release-7-5.noarch.rpm</code></pre>
+<p>You can install packages the OpenCV toolkit depends upon by entering this command at a Linux command prompt:</p>
+<pre><code>    sudo yum install gcc-c++ bzip2-devel cmake libcurl-devel gtk2-devel jasper-devel libjpeg-devel libmicrohttpd-devel libpng-devel libsvm-devel libtiff-devel libv41-devel pkgconfig SDL-devel wget yasm zlib-devel pandoc</code></pre>
+<h2 id="install-gpu-device-drivers">install GPU device drivers</h2>
+<p>If your machine has a GPU, and you want OpenCV to use it, download device drivers for it from the manufacturer’s website and install them before proceeding. Then, when configuring OpenCV with ’cmake’ below, specify <code>-D WITH\_OPENCL=ON</code> instead of <code>-D WITH\_OPENCL=OFF</code>.</p>
+<h2 id="build-and-install-the-ffmpeg-library">build and install the FFmpeg library</h2>
+<p>The <a href="http://ffmpeg.org/">FFmpeg library</a> contains codecs (encoders and decoders) for many video formats, and can use other codecs that you may have installed separately.</p>
+<p>The FFmpeg library is licensed under the GNU Lesser General Public License (LGPL) version 2.1 or later. However, FFmpeg incorporates several optional parts and optimizations that are covered by the GNU General Public License (GPL) version 2.</p>
+<p><strong>Please note:</strong> Some codecs included in FFmpeg may be the subject of patents for which licenses may be needed. Please be certain you have authorization to use any such codecs in your application. See <a href="http://ffmpeg.org/legal.html"><a href="http://ffmpeg.org/legal.html">http://ffmpeg.org/legal.html</a></a> and the relevant audio/video websites for more information, or consult with your legal counsel. You may choose to include or exclude support for particular codecs when you configure the library, as described below.</p>
+<p>The FFmpeg library must be built and installed from source code. You can download a package containing the source for the current release of the FFmpeg library from here:</p>
+<ul>
+<li><a href="http://ffmpeg.org/download.html"><a href="http://ffmpeg.org/download.html">http://ffmpeg.org/download.html</a></a></li>
+</ul>
+<p>After downloading the FFmpeg package you must unpack it, build the libraries, and install them. This requires 'root' privileges.</p>
+<p>The FFmpeg library has many configuration options. In particular, support for various video codecs can be included or excluded by specifying additional options of the ’./configure’ command. You can display its options by entering these commands at a Linux prompt:</p>
+<pre><code>    tar -xvf ffmpeg-3.0.1.tar.bz2
+    cd ffmpeg-3.0.1
+    ./configure --help</code></pre>
+<p>After choosing configuration options for the FFmpeg library, you can build and install it by entering these commands at a Linux prompt:</p>
+<pre><code>    cd ffmpeg-3.0.1
+    ./configure --prefix=$OPENCV_INSTALL_PATH --enable-shared --enable-swscale --enable-fontconfig --enable-libfreetype ... more options ...
+    make
+    sudo make install</code></pre>
+<p><strong>Please note:</strong> You should not configure FFmpeg with the '–enable-nonfree' or '--enable-gpl' options unless you have obtained licenses for the video codecs your applications will use.</p>
+<p>After you have installed the FFmpeg library, you can verify that it was installed properly by typing the command ’ffmpeg’ without any arguments at a Linux prompt:</p>
+<pre><code>    ffmpeg</code></pre>
+<p>The ’ffmpeg’ command should display its version, configuration and libraries, something like this:</p>
+<pre><code>    ffmpeg version 3.0.1 Copyright (c) 2000-2016 the FFmpeg developers
+      built with gcc 4.8.3 (GCC) 20140911 (Red Hat 4.8.3-9)
+      configuration: --prefix=/usr/local --enable-shared --enable-swscale --enable-fontconfig --enable-libfreetype
+      libavutil      55. 17.103 / 55. 17.103
+      libavcodec     57. 24.102 / 57. 24.102
+      libavformat    57. 25.100 / 57. 25.100
+      libavdevice    57.  0.101 / 57.  0.101
+      libavfilter     6. 31.100 /  6. 31.100
+      libswscale      4.  0.100 /  4.  0.100
+      libswresample   2.  0.101 /  2.  0.101
+      libpostproc    54.  0.100 / 54.  0.100
+    Hyper fast Audio and Video encoder
+    usage: ffmpeg [options] [[infile options] -i infile]... {[outfile options] outfile}...
+    Use -h to get full help or, even better, run &#39;man ffmpeg&#39;</code></pre>
+<p>You can display a full list of the ’ffmpeg’ command’s arguments by entering this at a Linux prompt:</p>
+<pre><code>    ffmpeg -help full</code></pre>
+<p>You can display the video formats and codecs ’ffmpeg’ has been configured to use by entering these commands at a Linux prompt:</p>
+<pre><code>    ffmpeg -formats
+
+    ffmpeg -codecs</code></pre>
+<p>For further information, please refer to the ’ffmpeg’ man pages and the <a href="http://ffmpeg.org/documentation.html">online FFmpeg documentation</a>.</p>
+<h2 id="build-and-install-the-opencv-library">build and install the OpenCV library</h2>
+<p>The <a href="http://opencv.org/">OpenCV library</a> contains many algorithms for processing images in computer vision applications.</p>
+<p>The OpenCV library must be built and installed from source code. You can download a package containing the source for the current release of the OpenCV library from here:</p>
+<ul>
+<li><a href="http://opencv.org/downloads.html"><a href="http://opencv.org/downloads.html">http://opencv.org/downloads.html</a></a></li>
+</ul>
+<p>After downloading the OpenCV package, you can build and install it by entering these commands at a Linux prompt:</p>
+<pre><code>    unzip opencv-3.1.0.zip
+    mkdir opencv-3.1.0-build
+    cd opencv-3.1.0-build
+    export PKG_CONFIG_PATH=$OPENCV_INSTALL_PATH/lib/pkgconfig
+    cmake -D CMAKE_BUILD_TYPE=RELEASE -D CMAKE_INSTALL_PREFIX=$OPENCV_INSTALL_PATH -D OPENCV_EXTRA_C_FLAGS=&quot;-DHAVE_CAMV4L -DHAVE_CAMV4L2&quot; -D WITH_OPENCL=OFF ../opencv-3.1.0
+    make 
+    sudo make install</code></pre>
+<p><strong>Note:</strong> If your machine has a GPU and you have installed its device drivers, configure ’cmake’ with '-D WITH_OPENCL=ON' instead of '-D WITH_OPENCL=OFF'.</p>
+<p>You should confirm that the OpenCV library is configured to use the other libraries you installed above. For example, the ’cmake’ command should display something like this:</p>
+<pre><code>    --   GUI: 
+    --     QT:                          NO
+    --     GTK+ 2.x:                    YES (ver 2.24.28)
+    --     GThread :                    YES (ver 2.42.2)
+    --     GtkGlExt:                    NO
+    --     OpenGL support:              NO
+    --     VTK support:                 NO
+    -- 
+    --   Media I/O: 
+    --     ZLib:                        /lib64/libz.so (ver 1.2.7)
+    --     JPEG:                        /lib64/libjpeg.so (ver )
+    --     WEBP:                        build (ver 0.3.1)
+    --     PNG:                         /lib64/libpng.so (ver 1.5.13)
+    --     TIFF:                        /lib64/libtiff.so (ver 42 - 4.0.3)
+    --     JPEG 2000:                   /lib64/libjasper.so (ver 1.900.1)
+    --     OpenEXR:                     build (ver 1.7.1)
+    --     GDAL:                        NO
+    -- 
+    --   Video I/O:
+    --     DC1394 1.x:                  NO
+    --     DC1394 2.x:                  NO
+    --     FFMPEG:                      YES
+    --       codec:                     YES (ver 57.24.102)
+    --       format:                    YES (ver 57.25.100)
+    --       util:                      YES (ver 55.17.103)
+    --       swscale:                   YES (ver 4.0.100)
+    --       resample:                  NO
+    --       gentoo-style:              YES</code></pre>
+<p>For further information, please refer to the PDF files installed in /usr/local/share/OpenCV/doc and the <a href="http://opencv.org/documentation.html">online OpenCV documentation</a>.</p>
+<h2 id="build-the-opencv-toolkit-for-streams">build the OpenCV toolkit for Streams</h2>
+<p>The OpenCV toolkit contains operators for IBM Streams and sample Streams applications that illustrate the use of those operators. The toolkit also contains a contains a library that the operators use to invoke OpenCV algorithms and FFmpeg codecs. You must build the toolkit’s library, and you should build the sample applications so that you can verify that the operators work properly with the other libraries you have installed.</p>
+<p>You can download a package containing the OpenCV toolkit from:</p>
+<ul>
+<li><a href="http://ibmstreams.github.io/streamsx.opencv/">http://ibmstreams.github.io/streamsx.opencv/</a></li>
+</ul>
+<p>After downloading the OpenCV toolkit package you must unpack it and build its library and sample applications. You can do this by entering these commands at a Linux prompt:</p>
+<pre><code>    unzip IBMStreams-streamsx.opencv-xxxxxxx.zip
+    mv streamsx.IBMStreams-streamsx.opencv-xxxxxxx streamsx.opencv               
+    cd streamsx.opencv
+    make</code></pre>
+<p>After building the toolkit’s sample applications, you should execute some of them to verify that the operators work properly on your machine. For instructions on doing this, see <a href="UsingToolkit.html">Using the OpenCV Toolkit</a>.</p>
+<p>The OpenCV toolkit documentation is available in 'markdown' and HTML formats in these directories:</p>
+<ul>
+<li><p>streamsx.opencv/com.ibm.streamsx.opencv/doc/md/index.md</p></li>
+<li><p><a href="index.html">streamsx.opencv/com.ibm.streamsx.opencv/doc/html/index.html</a></p></li>
+</ul>
+<hr />
+<p>© Copyright 2012, 2016, International Business Machines Corporation, All Rights Reserved</p>
+</body>
+</html>

@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="pandoc">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title></title>
+  <style type="text/css">code{white-space: pre;}</style>
+  <!--[if lt IE 9]>
+    <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <![endif]-->
+</head>
+<body>
+<h1 id="sample-applications">Sample Applications</h1>
+<p>The sample applications illustrate how to <a href="UsingToolkit.html">use the toolkit</a> in Streams applications. They are defined in the Streams namespace ’samples’, and use the <a href="OperatorsAndTypes.html">operators and types</a> in the namespace ’com.ibm.streamsx.opencv’.</p>
+<p>All of the sample applications are compiled when the toolkit is <a href="InstallingToolkit.html">installed</a>. The sample applications can also be built individually within Streams Studio, or with the ’sc’ command, like this:</p>
+<pre><code>    cd .../streams.opencv/com.ibm.streamsx.opencv
+    make sample-application-name
+    ./output/sample-application-name/bin/standalone -t 3</code></pre>
+<p>Below are descriptions of each sample application, including which operators it uses.</p>
+<h2 id="addtext.spl">addtext.spl</h2>
+<p>Reads a stream of images from a video file. Prints width, height, and frame count on the image. The resulting video is displayed in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>AddText</code><br /></li>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="blank2.spl">blank2.spl</h2>
+<p>Creates a stream of blank images with a specific height, width, fps, and color. The stream stats are printed on the image. The resulting video is output to a HTTPViewer on a specific port.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>Blank</code><br /></li>
+<li><code>HTTPViewer</code><br /></li>
+<li><code>Stats</code></li>
+</ul>
+<h2 id="blank.spl">blank.spl</h2>
+<p>Creates a stream of blank images with a specific height, width, fps, and color. The stream stats are printed on the image. The resulting video is output to a MJPEGStreamer on a specific port.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>Blank</code><br /></li>
+<li><code>MJPEGStreamer</code><br /></li>
+<li><code>Stats</code></li>
+</ul>
+<h2 id="box.spl">box.spl</h2>
+<p>Periodically polls for an image from a url. A box is added to the retrieved images. The resulting video is displayed in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromURL</code><br /></li>
+<li><code>MakeBox</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="cam_proxy.spl">cam_proxy.spl</h2>
+<p>Captures video from a local webcam. The resulting video is output through a proxy connection.</p>
+<p>(See src_proxy demo for the receiving proxy demo)</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>DisplayProxy</code></li>
+</ul>
+<h2 id="cam.spl">cam.spl</h2>
+<p>Captures video from a local webcam. The resulting video is displayed in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="codebook.spl">codebook.spl</h2>
+<p>Reads a stream of images from a video file. The images are smoothed before background/foreground detection is done. For the first 1s, the background is “learned”, then only the foreground connected objects will be displayed in a X11 window.</p>
+<p>The image from the CodeBook operator is a binary matrix of pixels of whether a foreground object is present(255) or not(0). This needed to be converted to a color image before the binary image was “ANDed” with the original image. This results in the foreground color image showing through and the background remaining black(0).</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>Apply2</code><br /></li>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>CodeBook</code><br /></li>
+<li><code>ConnectedComponents</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>Smooth</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="common.spl">common.spl</h2>
+<p>This is not a sample application, although it does have the .spl file extension.</p>
+<p>This file is used to define all of the common tuple types, so the tuple definitions did not have to be included at the top of each sample application.</p>
+<p>toolkit operators used: none</p>
+<h2 id="contours_on_file.spl">contours_on_file.spl</h2>
+<p>Reads a stream of images from a video file. The images are converted to grey and smoothed before thresholding is done. All pixels with value 75 or less are changed to zero(black). Then white contours are drawn on the image.</p>
+<p>In order to display the new image next to the original, they first have to have the same number of color channels. So the new image is converted to color first. The result is displayed in a X11 window and saved to an output file at the same frame rate as the input file.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>Collage</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>DrawContours</code><br /></li>
+<li><code>SaveToFile</code><br /></li>
+<li><code>Smooth</code><br /></li>
+<li><code>Threshold</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="contours_on_jpg.spl">contours_on_jpg.spl</h2>
+<p>Creates a stream of images from a single jpg file. The images are converted to grey and smoothed before thresholding is done. All pixels with value 150 or less are changed to zero(black). Then white contours are drawn on the image. The result is displayed in a X11 window. Then the stats <span>tuples/s, bytes/s, and number of seconds</span> are written to a log.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>BitBucket</code><br /></li>
+<li><code>Blank</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>DrawContours</code><br /></li>
+<li><code>Smooth</code><br /></li>
+<li><code>Threshold</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="copy.spl">copy.spl</h2>
+<p>Reads a stream of images from a video file. The images are then saved to an output video file with same rate as the input file. The video is also displayed in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>SaveToFile</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="crawler.spl">crawler.spl</h2>
+<p>Scans two directories, one for all files and another only for files matching a specific REGEX pattern. The file names are output to files.</p>
+<p>For some operators (i.e. ReadImage), this could be used as an input specification mechanism (see imgcrawler demo.)</p>
+<p>toolkit operators used: none</p>
+<h2 id="demo1b.spl">demo1b.spl</h2>
+<p>Reads a stream of images from a video file. The resulting video is output to a MJPEGStreamer on a specific port.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>MJPEGStreamer</code></li>
+</ul>
+<h2 id="demo1.spl">demo1.spl</h2>
+<p>Captures video from a local webcam. The resulting video is displayed in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="demo2b.spl">demo2b.spl</h2>
+<p>Reads a stream of images from a video file. Images are converted to grey scale and output to a MJPEGStreamer on a specific port.</p>
+<p>Grey scale images are then passed through erode and dilate functions before outputing to a second MJPEGStreamer on a different port.</p>
+<p>The original video is smoothed and outputted to a third MJPEGStreamer on a different port.</p>
+<p>Using the original grey scale images, high and low thresholds are applied. The low value indicates pixels with a value less than are converted to black(0). The high value indicates pixels with larger values are converted to max(255) and less/equal are converted to black (0). Trackbars are used to allow the user to adjust the threshold values for the high and low thresholds. The two thresholded images are “ORed” together resulting in all “max” pixels being kept from the high threshold image and then all remaining pixels being kept from the low threshold image. The resulting video is output to a fourth MJPEGStreamer on a different port.</p>
+<p>Using the eroded/dilated grey scale images, the same high and low thresholds as above are applied. The resulting video is output to a fifth MJPEGStreamer on a different port.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>Apply2</code><br /></li>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>Dilate</code><br /></li>
+<li><code>Erode</code><br /></li>
+<li><code>MJPEGStreamer</code><br /></li>
+<li><code>Smooth</code><br /></li>
+<li><code>Threshold</code><br /></li>
+<li><code>TrackBar</code></li>
+</ul>
+<h2 id="demo2.spl">demo2.spl</h2>
+<p>Captures video from a local webcam. Images are converted to grey scale and displayed in a X11 window.</p>
+<p>Grey scale images are then passed through erode and dilate functions before displaying in a second X11 window.</p>
+<p>The original video is smoothed and displayed in a third X11 window.</p>
+<p>Using the original grey scale images, high and low thresholds are applied. The low value indicates pixels with a value less than are converted to black(0). The high value indicates pixels with larger values are converted to max(255) and less/equal are converted to black (0). Trackbars are used to allow the user to adjust the threshold values for the high and low thresholds. The two thresholded images are “ORed” together resulting in all “max” pixels being kept from the high threshold image and then all remaining pixels being kept from the low threshold image. The resulting video is displayed in a fourth X11 window.</p>
+<p>Using the eroded/dilated grey scale images, the same high and low thresholds as above are applied. The resulting video is displayed in a fifth X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>Apply2</code><br /></li>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>Dilate</code><br /></li>
+<li><code>Erode</code><br /></li>
+<li><code>Smooth</code><br /></li>
+<li><code>Threshold</code><br /></li>
+<li><code>TrackBar</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="demo3b2.spl">demo3b2.spl</h2>
+<p>Captures video from a input file. Images are converted to grey scale. High and low thresholds are applied. The low value indicates pixels with a value less than are converted to black(0). The high value indicates pixels with larger values are converted to max(255) and less/equal are converted to black(0). Trackbars are used to allow the user to adjust the threshold values for the high and low thresholds. The two thresholded images are “ORed” together resulting in all “max” pixels being kept from the high threshold image and then all remaining pixels being kept from the low threshold image. The resulting video is output to a MJPEGStreamer on a specific port. Then contours are drawn in white on a black image and output to a second MJPEGStreamer on a different port.</p>
+<p>For comparison the original grey images are smoothed first prior to thresholding and drawing contours. The resulting contour images are output to a third MJPEGStreamer on a different port.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>Apply2</code><br /></li>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>DrawContours</code><br /></li>
+<li><code>MJPEGStreamer</code><br /></li>
+<li><code>Smooth</code><br /></li>
+<li><code>Threshold</code><br /></li>
+<li><code>TrackBar</code></li>
+</ul>
+<h2 id="demo3b.spl">demo3b.spl</h2>
+<p>Captures video from a input file. Images are converted to grey scale. High and low thresholds are applied. The low value indicates pixels with a value less than are converted to black(0). The high value indicates pixels with larger values are converted to max(255) and less/equal are converted to black(0). Trackbars are used to allow the user to adjust the threshold values for the high and low thresholds. The two thresholded images are “ORed” together resulting in all “max” pixels being kept from the high threshold image and then all remaining pixels being kept from the low threshold image. The resulting video is output to a MJPEGStreamer on a specific port. Then contours are drawn in white on a black image and output to a second MJPEGStreamer on a different port.</p>
+<p>For comparison the original grey images are smoothed first prior to thresholding and drawing contours. The resulting contour images are output to a third MJPEGStreamer on a different port.</p>
+<p>In order to display the new contour image next to the original, the two must have the same number of color channels. So the new image is converted to color first. The result is output to a forth MJPEGStreamer on a different port and saved to an output file at 15 frames/s.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>Apply2</code><br /></li>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>Collage</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>DrawContours</code><br /></li>
+<li><code>MJPEGStreamer</code><br /></li>
+<li><code>SaveToFile</code><br /></li>
+<li><code>Smooth</code><br /></li>
+<li><code>Threshold</code><br /></li>
+<li><code>TrackBar</code></li>
+</ul>
+<h2 id="demo3.spl">demo3.spl</h2>
+<p>Captures video from a local web cam. Images are converted to grey scale. High and low thresholds are applied. The low value indicates pixels with a value less than are converted to black(0). The high value indicates pixels with larger values are converted to max(255) and less/equal are converted to black(0). Trackbars are used to allow the user to adjust the threshold values for the high and low thresholds. The two thresholded images are “ORed” together resulting in all “max” pixels being kept from the high threshold image and then all remaining pixels being kept from the low threshold image. The resulting video is displayed in a X11 window. Then contours are drawn in white on a black image and displayed in a second X11 window.</p>
+<p>For comparison the original grey images are smoothed first prior to thresholding and drawing contours. The resulting contour images are displayed in a third X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>Apply2</code><br /></li>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>DrawContours</code><br /></li>
+<li><code>Smooth</code><br /></li>
+<li><code>Threshold</code><br /></li>
+<li><code>TrackBar</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="demo4b.spl">demo4b.spl</h2>
+<p>Reads a stream of images from a video file. The images are smoothed before background/foreground detection is done. For the first 1s, the background is “learned”, then only the foreground connected objects will be output to a MJPEGStreamer on a specific port.</p>
+<p>The image from the CodeBook operator is a binary matrix of pixels of whether a foreground object is present(255) or not(0). This needed to be converted to a color image before the binary image was “ANDed” with the original image. This results in the foreground color image showing through and the background remaining black(0).</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>Apply2</code><br /></li>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>CodeBook</code><br /></li>
+<li><code>ConnectedComponents</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>MJPEGStreamer</code><br /></li>
+<li><code>Smooth</code></li>
+</ul>
+<h2 id="demo4.spl">demo4.spl</h2>
+<p>Captures video through a proxy connection. The images are smoothed before background/foreground detection is done. For the first 1s, the background is “learned”, then only the foreground connected objects will be displayed in a X11 window.</p>
+<p>The image from the CodeBook operator is a binary matrix of pixels of whether a foreground object is present(255) or not(0). This needed to be converted to a color image before the binary image was “ANDed” with the original image. This results in the foreground color image showing through and the background remaining black(0).</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>Apply2</code><br /></li>
+<li><code>CodeBook</code><br /></li>
+<li><code>ConnectedComponents</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>Smooth</code><br /></li>
+<li><code>SourceProxy</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="demo5b.spl">demo5b.spl</h2>
+<p>Reads a stream of images from a video file. The images are passed through face detection model. Then circles are drawn around the detected faces. The result is outputted to a MJPEGStreamer on a specific port.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>DrawCircles</code><br /></li>
+<li><code>FaceDetection</code><br /></li>
+<li><code>MJPEGStreamer</code></li>
+</ul>
+<h2 id="demo5.spl">demo5.spl</h2>
+<p>Captures video through a proxy connection. The images are passed through face detection model. Then circles are drawn around the detected faces. The result is displayed in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>DrawCircles</code><br /></li>
+<li><code>FaceDetection</code><br /></li>
+<li><code>SourceProxy</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="demo6b.spl">demo6b.spl</h2>
+<p>Reads a stream of images from a video file. The motion between consecutive images is detected and motion vectors are drawn on the image. The stream stats are printed on the image before outputing to a MJPEGStreamer on a specific port.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>MJPEGStreamer</code><br /></li>
+<li><code>MotionDetection</code><br /></li>
+<li><code>Stats</code></li>
+</ul>
+<h2 id="demo6.spl">demo6.spl</h2>
+<p>Captures video from a local webcam. The motion between consecutive images is detected and motion vectors are drawn on the image. The stream stats are printed on the image before displaying in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>MotionDetection</code><br /></li>
+<li><code>Stats</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="demo7b.spl">demo7b.spl</h2>
+<p>Reads a stream of images from a video file. The motion between consecutive images is detected and motion vectors are drawn on the image. The stream stats are printed on the image before outputing to a MJPEGStreamer on a specific port.</p>
+<p>The parameters for the motion detection algorithm are input by the user via trackbars.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>MJPEGStreamer</code><br /></li>
+<li><code>MotionDetection</code><br /></li>
+<li><code>Stats</code><br /></li>
+<li><code>TrackBar</code></li>
+</ul>
+<h2 id="demo7.spl">demo7.spl</h2>
+<p>Captures video from a local webcam. The motion between consecutive images is detected and motion vectors are drawn on the image. The stream stats are printed on the image before displaying in a X11 window.</p>
+<p>The parameters for the motion detection algorithm are input by the user via trackbars.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>MotionDetection</code><br /></li>
+<li><code>Stats</code><br /></li>
+<li><code>TrackBar</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="draw_contours_on_cam.spl">draw_contours_on_cam.spl</h2>
+<p>Captures video from a local webcam. The images are converted to grey and smoothed before thresholding is done. All pixels with value greater than 128 are changed to zero(black). Contours are detected and drawn in white on a black image. When this contour image is “ORed” with the black/white webcam image the result is white contour lines on top of the black/white webcam image. Images are displayed in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>Apply2</code><br /></li>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>DrawContours</code><br /></li>
+<li><code>Smooth</code><br /></li>
+<li><code>Threshold</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="draw_contours_on_url.spl">draw_contours_on_url.spl</h2>
+<p>Periodically polls for an image from a url. The images are converted to grey and smoothed before thresholding is done. All pixels with value greater than 128 are changed to zero(black). Contours are detected and drawn in white on a black image. When this contour image is “ORed” with the black/white webcam image the result is white contour lines on top of the black/white webcam image. Images are displayed in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>Apply2</code><br /></li>
+<li><code>CaptureFromURL</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>DrawContours</code><br /></li>
+<li><code>Smooth</code><br /></li>
+<li><code>Threshold</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="equalizehist.spl">equalizehist.spl</h2>
+<p>Captures video from a local webcam. The average luminosity of all the pixels in the image is computed and printed on the image. Then image frames are tagged with a unique ascending id value.</p>
+<p>For (potential) parallel processing the input image stream is passed through a ThreadedSplit operator. Images will be sent to one of three operators (two equalize the image histograms and the third performs no operation). The three streams are then merged using a Custom operator.</p>
+<p>At this point the images are not necessarily in order, so the image stream is passed through a Sequencer to guarantee image order. The average luminosity of the new images is computed again.</p>
+<p>The original image stream is displayed next to the new images in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>Average</code><br /></li>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>Collage</code><br /></li>
+<li><code>EqualizeHist</code><br /></li>
+<li><code>Nop</code><br /></li>
+<li><code>Sequencer</code><br /></li>
+<li><code>Tagger</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="facedetect.spl">facedetect.spl</h2>
+<p>Captures video from a local webcam. The images are passed through face detection model, and rectangles are drawn around the detected faces. The result is displayed in a X11 window, and a sampling of the faces detected are written to files in JPEG format.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>CropBoxes</code><br /></li>
+<li><code>DrawRectangles</code><br /></li>
+<li><code>FaceDetection</code><br /></li>
+<li><code>SaveImage</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="faces_edges_cam.spl">faces_edges_cam.spl</h2>
+<p>Captures video from a camera attached to the machine, passes the images through a face detection model and an edge detector on separate threads, and displays the results side-by-side in an X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>Collage</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>DrawRectangles</code><br /></li>
+<li><code>FaceDetection</code><br /></li>
+<li><code>Resize</code><br /></li>
+<li><code>Sobel</code><br /></li>
+<li><code>Threshold</code><br /></li>
+<li><code>TrackBar</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="faces_edges_file.spl">faces_edges_file.spl</h2>
+<p>Reads a stream of images from a video file, passes the images through a face detection model and an edge detector on separate threads, and streams a side-by-side video to an external viewer on TCP port 9001.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>Collage</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>DrawRectangles</code><br /></li>
+<li><code>FaceDetection</code><br /></li>
+<li><code>MJPEGStreamer</code><br /></li>
+<li><code>Resize</code><br /></li>
+<li><code>Sobel</code><br /></li>
+<li><code>Threshold</code></li>
+</ul>
+<h2 id="file_proxy.spl">file_proxy.spl</h2>
+<p>Reads a stream of images from a video file. The resulting video is output through a proxy connection. Then video is captured through a proxy connection. The resulting video is displayed in a X11 window.</p>
+<p>(See cam_proxy and src_proxy demos for a similar split version of this proxy demo)</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>DisplayProxy</code><br /></li>
+<li><code>SourceProxy</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="file.spl">file.spl</h2>
+<p>Reads a stream of images from a video file. Images are timestamped with a time relative to the start of the stream. The resulting video is displayed in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>TimeStamp</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="fun.spl">fun.spl</h2>
+<p>Captures video from a local web cam. Images are converted to grey scale and smoothed. A low threshold is applied. The low value indicates pixels with a value less than are converted to black(0). A Trackbar is used to allow the user to adjust the threshold value. Then contours are drawn in white on a black image followed by dilating the contours to make the lines thicker.</p>
+<p>The dilated contour image is converted to a 3 channel image and then “ORed” with a smoothed version of the original web cam image. This keeps all of the color from the original image while outlining the contours in thick white lines. The stream stats are printed on the image before displaying in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>Apply2</code><br /></li>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>Dilate</code><br /></li>
+<li><code>DrawContours</code><br /></li>
+<li><code>Smooth</code><br /></li>
+<li><code>Stats</code><br /></li>
+<li><code>Threshold</code><br /></li>
+<li><code>TrackBar</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="imgcrawler.spl">imgcrawler.spl</h2>
+<p>Creates a stream of blank images with a specific height, width, and color at 1 frame/s. Scans a directory, one for all image files (matching a specific REGEX pattern.) The file names are input to the ReadImage operator which creates a tuple for each image. Images are combined with the blank image with 50 is added to the image and the result is displayed in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>AddText</code><br /></li>
+<li><code>Blank</code><br /></li>
+<li><code>CombineImg</code><br /></li>
+<li><code>ReadImage</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="log.spl">log.spl</h2>
+<p>Demonstrates the DoLog operator functionality. Web cam images are passed through the DoLog operator both regular and inverted. The results are displayed next to the original image in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>Collage</code><br /></li>
+<li><code>DoLog</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="mix_cam_snow.spl">mix_cam_snow.spl</h2>
+<p>Captures video from a local webcam. Images are converted to grey. The snow operator creates a stream of random snow images the same dimensions as the web cam images. The grey web cam images and the snow images are “ORed” together, effectively creating a snowy cam image displayed in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>Apply2</code><br /></li>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>Snow</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="modec.spl">modec.spl</h2>
+<p>Captures video from a local webcam. The motion between consecutive images is detected and motion vectors are drawn on the image. The stream stats are printed on the image before displaying in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>MotionDetection</code><br /></li>
+<li><code>Stats</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="multiple_cameras.spl">multiple_cameras.spl</h2>
+<p>Captures video from one or more cameras attached to the machine, passes the images through a face detection model, adds text labels to the images, and displays the results side-by-side in an X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>AddText</code><br /></li>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>Collage</code><br /></li>
+<li><code>DrawRectangles</code><br /></li>
+<li><code>FaceDetection</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="onc1.spl">onc1.spl</h2>
+<p>Reads a stream of images from a video file as fast as possible. Images have a black box drawn on them hiding some feature of the input video (e.g. timestamp or logo), then any resulting empty frames are discarded.</p>
+<p>The frames are then paced to the same rate as the input video and output to a MJPEGStreamer on a specific port.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>FramePacer</code><br /></li>
+<li><code>MakeBox</code><br /></li>
+<li><code>MJPEGStreamer</code><br /></li>
+<li><code>SkipEmpty</code></li>
+</ul>
+<h2 id="onc2.spl">onc2.spl</h2>
+<p>Captures video from a input file. Images are converted to grey scale. High and low thresholds are applied. The low value indicates pixels with a value less than are converted to black(0). The high value indicates pixels with larger values are converted to max(255) and less/equal are converted to black(0). Trackbars are used to allow the user to adjust the threshold values for the high and low thresholds. The two thresholded images are “ORed” together resulting in all “max” pixels being kept from the high threshold image and then all remaining pixels being kept from the low threshold image. Connected components are detected in the resulting image, components are white(255) and non-component pixels are black(0).</p>
+<p>The thresholded video is displayed in a X11 window and the connect component video is displayed in a second X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>Apply2</code><br /></li>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>ConnectedComponents</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>Threshold</code><br /></li>
+<li><code>TrackBar</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="onc3.spl">onc3.spl</h2>
+<p>Captures video from a local webcam. Any empty frames are skipped prior to flipping the image vertically and displaying in a X11 window.</p>
+<p>Also the flipped images are smoothed before background/foreground detection is done. For the first 5s, the background is “learned”, then the foreground connected objects are detected. Components are displayed white(255) and non-component pixels are displayed black(0) in a second X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>CodeBook</code><br /></li>
+<li><code>ConnectedComponents</code><br /></li>
+<li><code>Flip</code><br /></li>
+<li><code>SkipEmpty</code><br /></li>
+<li><code>Smooth</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="onc4.spl">onc4.spl</h2>
+<p>Captures video from a local webcam. Any empty frames are skipped prior to pacing the input image stream to the same as an input file. The images are converted to grey before thresholding is done. All pixels with value greater than are changed to zero(black). A trackbar is used to allow the user to adjust the threshold value.</p>
+<p>Connect components are detected in the threshold image and contours are detected and drawn in white on a black image. The threshold images and contour images are output to separate MJPEGStreamers.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>ConnectedComponents</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>DrawContours</code><br /></li>
+<li><code>FramePacer</code><br /></li>
+<li><code>MJPEGStreamer</code><br /></li>
+<li><code>SkipEmpty</code><br /></li>
+<li><code>Threshold</code><br /></li>
+<li><code>TrackBar</code></li>
+</ul>
+<h2 id="onc5.spl">onc5.spl</h2>
+<p>Captures video from a local webcam. The images are converted to grey before the Canny operator is used to detect image contours. Trackbars are used to allow the user to adjust the threshold values to the Canny operator. Any empty frames (no contours) are skipped prior to displaying the results in a X11 window.</p>
+<p>Also the images from the Canny operator are converted to 3 channel images in order to display next to the original input video. This image collage is saved to an output file at the same rate as an input video.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>Canny</code><br /></li>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>Collage</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>SaveToFile</code><br /></li>
+<li><code>SkipEmpty</code><br /></li>
+<li><code>TrackBar</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="onc_f.spl">onc_f.spl</h2>
+<p>Remove empty frames from a video file. Captures video from a input file. Any empty frames are skipped prior to saving to an output file.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>SaveToFile</code><br /></li>
+<li><code>SkipEmpty</code></li>
+</ul>
+<h2 id="proxy2.spl">proxy2.spl</h2>
+<p>Captures video from a local webcam. The resulting video is output through a proxy connection. Then video is captured through a proxy connection. The resulting video is displayed in a X11 window.</p>
+<p>(See cam_proxy and src_proxy demos for a similar split version of this proxy demo)</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>DisplayProxy</code><br /></li>
+<li><code>SourceProxy</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="rank.spl">rank.spl</h2>
+<p>Captures video from a local webcam.</p>
+<p>Frames are adaptively skipped prior to performing minimum rank filtering. The stream stats are printed on the image before displaying in a X11 window.</p>
+<p>Frames are adaptively skipped prior to performing median rank filtering. The stream stats are printed on the image before displaying in a X11 window.</p>
+<p>Frames are adaptively skipped prior to performing maximum rank filtering. The stream stats are printed on the image before displaying in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>RankFilter</code><br /></li>
+<li><code>SkipFrame</code><br /></li>
+<li><code>Stats</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="record.spl">record.spl</h2>
+<p>Reads a stream of images from a video file. Images are flipped and timestamped with a time relative to the start of the stream.</p>
+<p>The original and flipped/timestamp videos are displayed in separate X11 windows. Also the flipped/timestamp video is saved to an output file.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>Flip</code><br /></li>
+<li><code>SaveToFile</code><br /></li>
+<li><code>TimeStamp</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="rotate.spl">rotate.spl</h2>
+<p>Rotates and crops an image stream from a webcam (assumes a 640x480 input image.) Captures video from a local webcam. Images are rotates 90 degrees around a specified point and scaled to 75 image is the same size as the input image and has black background where the rotated image is not. The black background is cropped out of the image. The original, rotated, and cropped images are displayed side-by-side in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromCAM</code><br /></li>
+<li><code>Collage</code><br /></li>
+<li><code>Crop</code><br /></li>
+<li><code>Rotate</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="snow.spl">snow.spl</h2>
+<p>Random snow images are created at 10 frames/s. The frames are resized to 640x480 before smoothing and displaying in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>Resize</code><br /></li>
+<li><code>Smooth</code><br /></li>
+<li><code>Snow</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="speed.spl">speed.spl</h2>
+<p>A rough speed test. Creates a stream of 1000 blank images with a specific height, width, and color as fast as possible. The images are smoothed. Then the stats <span>tuples/s, bytes/s, and number of seconds</span> are written to a log.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>BitBucket</code><br /></li>
+<li><code>Blank</code><br /></li>
+<li><code>Smooth</code></li>
+</ul>
+<h2 id="src_proxy.spl">src_proxy.spl</h2>
+<p>Captures video through a proxy connection. The resulting video is displayed in a X11 window.</p>
+<p>(See cam_proxy demo for the transmitting proxy demo)</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>SourceProxy</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="threshold.spl">threshold.spl</h2>
+<p>Captures video from a input file. Images are converted to grey scale. High and low thresholds are applied. The low value indicates pixels with a value less than are converted to black(0). The high value indicates pixels with larger values are converted to max(255) and less/equal are converted to black(0). Trackbars are used to allow the user to adjust the threshold values for the high and low thresholds. The two thresholded images are “ORed” together resulting in all “max” pixels being kept from the high threshold image and then all remaining pixels being kept from the low threshold image. The resulting video is displayed in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>Apply2</code><br /></li>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>CvtColor</code><br /></li>
+<li><code>Threshold</code><br /></li>
+<li><code>TrackBar</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="url.spl">url.spl</h2>
+<p>Periodically polls for an image from a url. Images are displayed in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromURL</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<h2 id="video_stream.spl">video_stream.spl</h2>
+<p>Reads a stream of images from a video file. Images are output to a MJPEGStreamer on a specific port and output to a HTTPViewer on a specific port.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>HTTPViewer</code><br /></li>
+<li><code>MJPEGStreamer</code></li>
+</ul>
+<h2 id="xcombine.spl">xcombine.spl</h2>
+<p>Reads a stream of images from a video file. A second image is created by resizing the first to 130 with an offset and 30 second image does not overlap the first, the pixels are discarded. The result is displayed in a X11 window.</p>
+<p>toolkit operators used:</p>
+<ul>
+<li><code>CaptureFromFile</code><br /></li>
+<li><code>CombineImg</code><br /></li>
+<li><code>Resize</code><br /></li>
+<li><code>X11Viewer</code></li>
+</ul>
+<hr />
+<p>© Copyright 2012, 2016, International Business Machines Corporation, All Rights Reserved</p>
+</body>
+</html>
