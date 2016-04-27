@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<toolkitModel xmlns="http://www.ibm.com/xmlns/prod/streams/spl/toolkit" productVersion="4.1.1.0" xmlns:common="http://www.ibm.com/xmlns/prod/streams/spl/common" xmlns:ti="http://www.ibm.com/xmlns/prod/streams/spl/toolkitInfo" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+  <toolkit name="samples" requiredProductVersion="4.1.1.0" version="1.0.0">
+    <description>sample applications</description>
+    <uriTable>
+      <uri index="5" value="sample/cam_proxy.spl"/>
+      <uri index="20" value="sample/cam.spl"/>
+      <uri index="25" value="sample/onc1.spl"/>
+      <uri index="17" value="sample/facedetect.spl"/>
+      <uri index="52" value="sample/demo7b.spl"/>
+      <uri index="34" value="sample/file.spl"/>
+      <uri index="7" value="sample/snow.spl"/>
+      <uri index="40" value="sample/contours_on_jpg.spl"/>
+      <uri index="27" value="sample/video_stream.spl"/>
+      <uri index="15" value="sample/imgcrawler.spl"/>
+      <uri index="9" value="sample/speed.spl"/>
+      <uri index="47" value="sample/fun.spl"/>
+      <uri index="10" value="sample/blank2.spl"/>
+      <uri index="26" value="sample/demo2b.spl"/>
+      <uri index="6" value="sample/demo3b2.spl"/>
+      <uri index="18" value="sample/demo4.spl"/>
+      <uri index="8" value="sample/demo5b.spl"/>
+      <uri index="22" value="sample/url.spl"/>
+      <uri index="43" value="sample/onc_f.spl"/>
+      <uri index="33" value="sample/xcombine.spl"/>
+      <uri index="2" value="sample/demo1.spl"/>
+      <uri index="36" value="sample/demo2.spl"/>
+      <uri index="37" value="sample/mix_cam_snow.spl"/>
+      <uri index="41" value="sample/faces_edges_cam.spl"/>
+      <uri index="51" value="sample/demo4b.spl"/>
+      <uri index="57" value="sample/codebook.spl"/>
+      <uri index="32" value="sample/faces_edges_file.spl"/>
+      <uri index="23" value="sample/file_proxy.spl"/>
+      <uri index="28" value="sample/src_proxy.spl"/>
+      <uri index="35" value="sample/onc2.spl"/>
+      <uri index="11" value="sample/rank.spl"/>
+      <uri index="24" value="sample/addtext.spl"/>
+      <uri index="4" value="sample/onc5.spl"/>
+      <uri index="19" value="sample/rotate.spl"/>
+      <uri index="1" value="sample/demo7.spl"/>
+      <uri index="39" value="sample/demo6b.spl"/>
+      <uri index="12" value="sample/onc3.spl"/>
+      <uri index="30" value="sample/demo1b.spl"/>
+      <uri index="50" value="sample/copy.spl"/>
+      <uri index="56" value="sample/blank.spl"/>
+      <uri index="46" value="sample/threshold.spl"/>
+      <uri index="14" value="sample/demo6.spl"/>
+      <uri index="55" value="sample/contours_on_file.spl"/>
+      <uri index="29" value="sample/modec.spl"/>
+      <uri index="49" value="sample/crawler.spl"/>
+      <uri index="54" value="sample/demo3b.spl"/>
+      <uri index="16" value="sample/log.spl"/>
+      <uri index="53" value="sample/proxy2.spl"/>
+      <uri index="48" value="sample/demo3.spl"/>
+      <uri index="38" value="sample/record.spl"/>
+      <uri index="42" value="sample/box.spl"/>
+      <uri index="31" value="sample/demo5.spl"/>
+      <uri index="44" value="sample/equalizehist.spl"/>
+      <uri index="21" value="sample/onc4.spl"/>
+      <uri index="3" value="sample/multiple_cameras.spl"/>
+      <uri index="45" value="sample/draw_contours_on_url.spl"/>
+      <uri index="13" value="sample/draw_contours_on_cam.spl"/>
+    </uriTable>
+    <namespace name="sample">
+      <compositeOp column="11" line="10" name="demo7" potentialMain="true" uriIndex="1"/>
+      <compositeOp column="11" line="10" name="demo1" potentialMain="true" uriIndex="2"/>
+      <compositeOp column="11" line="9" name="BoxedFaces" potentialMain="false" uriIndex="3">
+        <parameter metaType="Expression" name="cameraIndex" optional="false" type="&lt;int32>"/>
+        <parameter metaType="Expression" name="modelName" optional="false" type="&lt;rstring>"/>
+        <parameter defaultValue="getEnvironmentVariable(&quot;OPENCV_INSTALL_PATH&quot;, &quot;/usr/local&quot;) + &quot;/share/OpenCV/haarcascades&quot;" metaType="Expression" name="modelDirectory" optional="true" type="&lt;rstring>"/>
+        <parameter defaultValue="2.0" metaType="Expression" name="boxScale" optional="true" type="&lt;float64>"/>
+        <parameter defaultValue="3" metaType="Expression" name="boxThickness" optional="true" type="&lt;int32>"/>
+        <outputPort name="BoxedFaceVideoStream" portIndex="0"/>
+      </compositeOp>
+      <compositeOp column="11" line="64" name="multiple_cameras" potentialMain="true" uriIndex="3">
+        <parameter defaultValue="getSubmissionTimeValue(&quot;modelName&quot;, &quot;frontalface_alt&quot;)" metaType="Expression" name="modelName" optional="true" type="&lt;rstring>"/>
+      </compositeOp>
+      <compositeOp column="11" line="10" name="onc5" potentialMain="true" uriIndex="4"/>
+      <compositeOp column="11" line="10" name="cam_proxy" potentialMain="true" uriIndex="5"/>
+      <compositeOp column="11" line="10" name="demo3b2" potentialMain="true" uriIndex="6"/>
+      <compositeOp column="11" line="10" name="snow" potentialMain="true" uriIndex="7"/>
+      <compositeOp column="11" line="10" name="demo5b" potentialMain="true" uriIndex="8"/>
+      <compositeOp column="11" line="10" name="speed" potentialMain="true" uriIndex="9"/>
+      <compositeOp column="11" line="10" name="blank2" potentialMain="true" uriIndex="10"/>
+      <compositeOp column="11" line="10" name="rank" potentialMain="true" uriIndex="11"/>
+      <compositeOp column="11" line="10" name="onc3" potentialMain="true" uriIndex="12"/>
+      <compositeOp column="11" line="10" name="draw_contours_on_cam" potentialMain="true" uriIndex="13"/>
+      <compositeOp column="11" line="10" name="demo6" potentialMain="true" uriIndex="14"/>
+      <compositeOp column="11" line="10" name="imgcrawler" potentialMain="true" uriIndex="15"/>
+      <compositeOp column="11" line="10" name="log" potentialMain="true" uriIndex="16"/>
+      <compositeOp column="11" line="10" name="facedetect" potentialMain="true" uriIndex="17"/>
+      <compositeOp column="11" line="10" name="demo4" potentialMain="true" uriIndex="18"/>
+      <compositeOp column="11" line="10" name="rotate" potentialMain="true" uriIndex="19"/>
+      <compositeOp column="11" line="10" name="cam" potentialMain="true" uriIndex="20"/>
+      <compositeOp column="11" line="10" name="onc4" potentialMain="true" uriIndex="21"/>
+      <compositeOp column="11" line="10" name="url" potentialMain="true" uriIndex="22"/>
+      <compositeOp column="11" line="10" name="file_proxy" potentialMain="true" uriIndex="23"/>
+      <compositeOp column="11" line="10" name="addtext" potentialMain="true" uriIndex="24"/>
+      <compositeOp column="11" line="10" name="onc1" potentialMain="true" uriIndex="25"/>
+      <compositeOp column="11" line="10" name="demo2b" potentialMain="true" uriIndex="26"/>
+      <compositeOp column="11" line="10" name="video_stream" potentialMain="true" uriIndex="27"/>
+      <compositeOp column="11" line="10" name="src_proxy" potentialMain="true" uriIndex="28"/>
+      <compositeOp column="11" line="10" name="modec" potentialMain="true" uriIndex="29"/>
+      <compositeOp column="11" line="10" name="demo1b" potentialMain="true" uriIndex="30"/>
+      <compositeOp column="11" line="10" name="demo5" potentialMain="true" uriIndex="31"/>
+      <compositeOp column="11" line="10" name="faces_edges_file" potentialMain="true" uriIndex="32"/>
+      <compositeOp column="11" line="10" name="xcombine" potentialMain="true" uriIndex="33"/>
+      <compositeOp column="11" line="10" name="file" potentialMain="true" uriIndex="34"/>
+      <compositeOp column="11" line="10" name="onc2" potentialMain="true" uriIndex="35"/>
+      <compositeOp column="11" line="10" name="demo2" potentialMain="true" uriIndex="36"/>
+      <compositeOp column="11" line="10" name="mix_cam_snow" potentialMain="true" uriIndex="37"/>
+      <compositeOp column="11" line="10" name="record" potentialMain="true" uriIndex="38"/>
+      <compositeOp column="11" line="10" name="demo6b" potentialMain="true" uriIndex="39"/>
+      <compositeOp column="11" line="10" name="contours_on_jpg" potentialMain="true" uriIndex="40"/>
+      <compositeOp column="11" line="10" name="faces_edges_cam" potentialMain="true" uriIndex="41"/>
+      <compositeOp column="11" line="10" name="box" potentialMain="true" uriIndex="42"/>
+      <compositeOp column="11" line="10" name="onc_f" potentialMain="true" uriIndex="43"/>
+      <compositeOp column="11" line="10" name="equalizehist" potentialMain="true" uriIndex="44"/>
+      <compositeOp column="11" line="10" name="draw_contours_on_url" potentialMain="true" uriIndex="45"/>
+      <compositeOp column="11" line="10" name="threshold" potentialMain="true" uriIndex="46"/>
+      <compositeOp column="11" line="14" name="fun" potentialMain="true" uriIndex="47"/>
+      <compositeOp column="11" line="10" name="demo3" potentialMain="true" uriIndex="48"/>
+      <compositeOp column="11" line="8" name="crawler" potentialMain="true" uriIndex="49"/>
+      <compositeOp column="11" line="10" name="copy" potentialMain="true" uriIndex="50"/>
+      <compositeOp column="11" line="10" name="demo4b" potentialMain="true" uriIndex="51"/>
+      <compositeOp column="11" line="10" name="demo7b" potentialMain="true" uriIndex="52"/>
+      <compositeOp column="11" line="10" name="proxy2" potentialMain="true" uriIndex="53"/>
+      <compositeOp column="11" line="10" name="demo3b" potentialMain="true" uriIndex="54"/>
+      <compositeOp column="11" line="10" name="contours_on_file" potentialMain="true" uriIndex="55"/>
+      <compositeOp column="11" line="10" name="blank" potentialMain="true" uriIndex="56"/>
+      <compositeOp column="11" line="10" name="codebook" potentialMain="true" uriIndex="57"/>
+    </namespace>
+    <dependency>
+      <common:name>com.ibm.streamsx.opencv</common:name>
+      <common:version>[2.0.0,3.0.0)</common:version>
+    </dependency>
+    <sabFiles>
+      <ti:include path="toolkit.xml" root="toolkitDir"/>
+      <ti:include path="impl/java/lib/**" root="toolkitDir"/>
+      <ti:include path="impl/java/bin/**" root="toolkitDir"/>
+      <ti:include path="impl/bin/**" root="toolkitDir"/>
+      <ti:include path="impl/lib/**" root="toolkitDir"/>
+      <ti:include path="impl/nl/*.dat" root="toolkitDir"/>
+      <ti:include path="etc/**" root="toolkitDir"/>
+      <ti:include path="lib/**" root="toolkitDir"/>
+      <ti:include path="nl/**" root="toolkitDir"/>
+      <ti:include path="opt/**" root="toolkitDir"/>
+    </sabFiles>
+  </toolkit>
+
+</toolkitModel>
